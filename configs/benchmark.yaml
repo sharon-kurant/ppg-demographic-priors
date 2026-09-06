@@ -1,0 +1,27 @@
+contract_version: source-faithful-v2
+models: [papagei_p, papagei_s, pulseppg, anyppg]
+datasets: [ppgbp, pulsedb_vital, pulsedb_mimic, butppg]
+targets: [sbp, dbp]
+foundation_conditions: [frozen, frozen_demographics]
+ridge_baselines: [demographics, ppg_features, ppg_features_demographics]
+outer_folds: 5
+inner_group_folds: 3
+ridge_alphas: [0.1, 1.0, 10.0, 100.0, 1000.0]
+ridge_fit_weighting: equal_participant_then_equal_measurement_then_equal_source_row
+ridge_inner_selection: pooled_participant_macro_oof_mae_after_measurement_aggregation
+embedding_inference_batch_size: 256
+pulsedb_subjects_per_cohort: 300
+maximum_pulsedb_segments_per_subject: 10
+pulsedb_selection_seed: 42
+butppg_quality_policy: official_quality_1
+maximum_butppg_segments_per_subject: 20
+butppg_selection_seed: 42
+primary_padding: zero
+padding_scope: ppgbp_only
+target_scale: raw_mmHg
+target_transform: none
+demographics_by_dataset:
+  ppgbp: [age, sex, bmi]
+  pulsedb_vital: [age, sex, bmi]
+  pulsedb_mimic: [age, sex]
+  butppg: [age, sex, bmi]

@@ -1,0 +1,27 @@
+contract_version: source-faithful-v2
+models:
+  papagei:
+    repository: https://github.com/Nokia-Bell-Labs/papagei-foundation-model.git
+    commit: 0c537dad4d2850e15b724260de820dd68d77f0b0
+    checkpoints:
+      papagei_p.pt: 3a6850961af527cbb2e476d3ad0bb374ae86ed86ffdd55b0b0d7e2f49451518e
+      papagei_s.pt: 79d68671e51bdc951fee853e5a8241099e38148ff26ed888b843849332e0b988
+  pulseppg:
+    repository: https://github.com/maxxu05/pulseppg.git
+    commit: 716eaf9cf966e8f76436f2263872ef38b1f90166
+    checkpoint: 485ade5033b3baa9b82e252fc131042dda897d7bdfc0d1a030d9746a1e98857c
+  anyppg:
+    repository: https://github.com/Ngk03/AnyPPG.git
+    commit: 661b877aa96eac3bba320a462cb2a3bfea991103
+    checkpoint: 99b9bb0a3c2b83a1f5d8ca2963fbd25329b6530e8d337de8825722fc6fd5f4fa
+datasets:
+  ppgbp:
+    source: https://doi.org/10.6084/m9.figshare.5459299.v5
+    version: 5
+  pulsedb:
+    source: https://github.com/pulselabteam/PulseDB
+    commit: db0824f18d9a462458e46fe94c31283a93a5c0d5
+    version: 2.0
+  butppg:
+    source: https://physionet.org/content/butppg/2.0.0/
+    version: 2.0.0

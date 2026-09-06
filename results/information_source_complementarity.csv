@@ -1,0 +1,41 @@
+dataset,target,model,model_label,demographic_fields,demographic_lift_mmhg,waveform_lift_beyond_demographics_mmhg,combined_better_than_both_components
+BUT PPG,dbp,anyppg,AnyPPG,age/sex/BMI,0.42122144482088125,-0.43818210490425225,False
+BUT PPG,dbp,handcrafted_ppg,PPG features,age/sex/BMI,0.43180075560216613,0.25232773035962713,True
+BUT PPG,dbp,papagei_p,PaPaGei-P,age/sex/BMI,-0.36045389350569895,-1.0250873289449487,False
+BUT PPG,dbp,papagei_s,PaPaGei-S,age/sex/BMI,0.43795494635327126,0.3247554091595049,True
+BUT PPG,dbp,pulseppg,Pulse-PPG,age/sex/BMI,0.5350876669896572,-0.12097193026180489,False
+BUT PPG,sbp,anyppg,AnyPPG,age/sex/BMI,1.8831594907316878,-3.721513513116255,False
+BUT PPG,sbp,handcrafted_ppg,PPG features,age/sex/BMI,3.5444945644260897,-0.2754545994224336,False
+BUT PPG,sbp,papagei_p,PaPaGei-P,age/sex/BMI,3.6445372637881737,-0.89168365200749,False
+BUT PPG,sbp,papagei_s,PaPaGei-S,age/sex/BMI,3.8864733834889895,-0.6210917539556867,False
+BUT PPG,sbp,pulseppg,Pulse-PPG,age/sex/BMI,1.8739237051693076,-2.3055840461769384,False
+PPG-BP,dbp,anyppg,AnyPPG,age/sex/BMI,0.6090902456552744,0.7222242073486999,True
+PPG-BP,dbp,handcrafted_ppg,PPG features,age/sex/BMI,0.6069423978983887,0.5983079152514851,True
+PPG-BP,dbp,papagei_p,PaPaGei-P,age/sex/BMI,0.07022507693471698,-0.30672370813251304,False
+PPG-BP,dbp,papagei_s,PaPaGei-S,age/sex/BMI,0.2488128680222328,-0.023606616055046256,False
+PPG-BP,dbp,pulseppg,Pulse-PPG,age/sex/BMI,0.3265514937374171,0.14432824619063503,True
+PPG-BP,sbp,anyppg,AnyPPG,age/sex/BMI,0.41448169263341933,1.3666859233462476,True
+PPG-BP,sbp,handcrafted_ppg,PPG features,age/sex/BMI,0.8272972660585731,1.3284025563088746,True
+PPG-BP,sbp,papagei_p,PaPaGei-P,age/sex/BMI,2.070414719490305,0.03236340056538378,True
+PPG-BP,sbp,papagei_s,PaPaGei-S,age/sex/BMI,1.9896567199266189,-0.24123627575002052,False
+PPG-BP,sbp,pulseppg,Pulse-PPG,age/sex/BMI,1.3505768290945008,0.6996973447848601,True
+PulseDB-MIMIC,dbp,anyppg,AnyPPG,age/sex,0.2894532751117343,0.677504210000775,True
+PulseDB-MIMIC,dbp,handcrafted_ppg,PPG features,age/sex,0.2518528684260406,0.3195523476205018,True
+PulseDB-MIMIC,dbp,papagei_p,PaPaGei-P,age/sex,0.33239550309438426,0.038276398535698725,True
+PulseDB-MIMIC,dbp,papagei_s,PaPaGei-S,age/sex,0.3039006942410298,0.09481733334522946,True
+PulseDB-MIMIC,dbp,pulseppg,Pulse-PPG,age/sex,0.3182091933341644,0.2876113387490417,True
+PulseDB-MIMIC,sbp,anyppg,AnyPPG,age/sex,0.022080570875118256,1.9312036682265656,True
+PulseDB-MIMIC,sbp,handcrafted_ppg,PPG features,age/sex,0.06279016142816632,1.3780248701918167,True
+PulseDB-MIMIC,sbp,papagei_p,PaPaGei-P,age/sex,-0.015095060890122828,0.4270192884980483,False
+PulseDB-MIMIC,sbp,papagei_s,PaPaGei-S,age/sex,-0.017154489264316317,0.6410647248766771,False
+PulseDB-MIMIC,sbp,pulseppg,Pulse-PPG,age/sex,-0.008394579493791566,1.1392679569524833,False
+PulseDB-Vital,dbp,anyppg,AnyPPG,age/sex/BMI,0.1799224275235206,1.6430379317575963,True
+PulseDB-Vital,dbp,handcrafted_ppg,PPG features,age/sex/BMI,0.25336515756613887,1.4016460628857004,True
+PulseDB-Vital,dbp,papagei_p,PaPaGei-P,age/sex/BMI,0.178525480022443,0.6546069943829835,True
+PulseDB-Vital,dbp,papagei_s,PaPaGei-S,age/sex/BMI,0.18101903689264204,0.608592890522641,True
+PulseDB-Vital,dbp,pulseppg,Pulse-PPG,age/sex/BMI,0.19668149041064895,1.0437363559816408,True
+PulseDB-Vital,sbp,anyppg,AnyPPG,age/sex/BMI,0.12102526062955007,3.2444771252300866,True
+PulseDB-Vital,sbp,handcrafted_ppg,PPG features,age/sex/BMI,0.0649319477384697,2.41112814082969,True
+PulseDB-Vital,sbp,papagei_p,PaPaGei-P,age/sex/BMI,0.08145100277409836,1.8344735371633407,True
+PulseDB-Vital,sbp,papagei_s,PaPaGei-S,age/sex/BMI,0.13686373037505023,1.1017409471373085,True
+PulseDB-Vital,sbp,pulseppg,Pulse-PPG,age/sex/BMI,0.10051301837020525,2.579030181406264,True

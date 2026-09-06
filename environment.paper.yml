@@ -1,0 +1,19 @@
+# Core versions recorded by the final manuscript-refresh runs. System libraries
+# are supplied by the execution platform, so this is a runtime record rather
+# than a byte-for-byte cross-platform solver lock.
+name: ppg-demographic-priors-paper
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12.12
+  - h5py>=3.10
+  - matplotlib>=3.8
+  - mne=1.10.2
+  - numpy=2.3.5
+  - openpyxl=3.1.5
+  - pandas=2.3.3
+  - pyyaml>=6.0
+  - scikit-learn=1.8.0
+  - scipy=1.16.3
+  - pytorch=2.7.0
+  - pytest>=8.0
