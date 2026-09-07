@@ -1,5 +1,5 @@
 {
-  "complete_tree_sha256": "0fdf64f49b75834092b690f3b0d4cecf93b979400360f983d4025e5d53d87e47",
+  "complete_tree_sha256": "103372f85eba026bbd9d6d863d0e6ff1053aa0ba73328d7aa06a4022f6e92b73",
   "contract_version": "source-faithful-v3",
   "exclusions": [
     "participant data and manifests",
@@ -12,7 +12,7 @@
   "files": {
     ".github/workflows/tests.yml": "659a9c48747e345621ce63c2e2e1b817273b27763a6b7288f72686f9a16ff0ec",
     ".gitignore": "c70bf21fdb05e40ef5fea7e5f3f2decbc711562ed0bce67edf8adcaf569abaf4",
-    "CITATION.cff": "091e8930e2257a5dbc44181fbddae5e5785dd1f4c5a88cba31d72aa7bc9398a0",
+    "CITATION.cff": "59d4365ec9221da2ad27550a903c1ff60429496a0c34bc0551bfa259295583d5",
     "LICENSE": "5fcca81d27de076966dc0717812e041e92153dc47f572d630e3b5b36ce9fe59f",
     "README.md": "12ef0b8c24a01a8df803f6d7156cd6d282b2ef6525327f95e70379ca4a79a4b4",
     "THIRD_PARTY_NOTICES.md": "a35fe4f77c308ef88bfb366f071f044cbbbcf6290c6e6de362a92d16a8afca20",
@@ -24,7 +24,7 @@
     "docs/protocol.md": "793e03507586d05e88bb3702fe610084445f46f340256028ff01b599b652604f",
     "environment.finetuning.yml": "af4aee209f56a832c50299d12fa78f3fa613da910370bcbdf317a9ac0f7a4fdc",
     "environment.paper.yml": "2505b7093709707840ad00c985c835fe10badfbccafed1218a56244ec1462b89",
-    "pyproject.toml": "542e4f4246370a7f5a02e1721cc6e22a030f349070dfa35b8a146a73de377726",
+    "pyproject.toml": "a5a3459b2752c906d55091e940bbc2daf9218dc366395299b2f2ff6b7ee7eb49",
     "results/README.md": "a486d8cf01e9038a8feabec4da7bd221d1555c457f5e036dfd4f0dd88e092af8",
     "results/benchmark_metrics.csv": "8229b1a80b2badd69694497faffdc88038671796b21be9a0d438f3ee22af7960",
     "results/cohort_summary.csv": "e07e1fa3a0b59e4325c8e6bfe078382e12fa781c8ef21f248c03218ae1477fce",
@@ -40,7 +40,7 @@
     "results/pulseppg_stabilization_comparison.csv": "0b6a3f81f7ddbec775b5277840a5d30a028cacc72277a336a607be0cc5f83d4c",
     "results/pulseppg_stabilization_summary.md": "75d303d714835064dd54949eb870447de9e5f3e28c9b55b2a0f6a5e18981a0e9",
     "results/seed_metrics.csv": "a2d77816bfeda12708caf87a095ea80ab54f0a720bd4a0c98f62b7f74cdc07d5",
-    "scripts/aggregate_full_benchmark.sh": "7e433873abde419adfd36102d9b9a140f5215963780c4dc282ea963aecb462d2",
+    "scripts/aggregate_full_benchmark.sh": "19fe4fa8578692309ff45a0113ce0ce07a4ca684ffb3b43a72f52a3cac817c30",
     "scripts/analyze_demographic_influence.py": "1c8c48891906d6ab05b984064bb821a2312fbe35b550dc0864357e2c302bfa5f",
     "scripts/build_paper_outputs.py": "17ef4c3fd908cb1600d54aaa0cad38e21ed3bc8891cd25b7f49ae12985c9602d",
     "scripts/download_butppg.sh": "4cbe66c9ca992262f581152a9f3cd0c42156987321c5022b1ff21c829ec6b5ef",
@@ -48,13 +48,13 @@
     "scripts/download_pulsedb_v2.sh": "455af9ca517aac966e1f271d0ca3ee5c0384b82f82c97f3f66a5d144264831dc",
     "scripts/extract_pulsedb_v2.sh": "236de8004c2d834f0842880478bde1951e5568086f011e79dc2f611b6911da02",
     "scripts/pulsedb_v2_archives.tsv": "9856f4299843eab792eb02805df9afd97ceda65e5e127e4c352cb544bd65e56e",
-    "scripts/reproduce_benchmark.sh": "38bc56bbd8371e497852559438c455fa1d98dc104949e06bee152094e2ba0c92",
+    "scripts/reproduce_benchmark.sh": "35b8da83ce390c221bef4af3999dc3391a487de87db681586860f1e1280f3db1",
     "scripts/reproduce_finetuning.sh": "d9431351c9841f6b712d86e176c9e87efb937455002b9b622ca36542927f61db",
     "scripts/setup_anyppg.sh": "1a21c4bccea54ecfb9433dcd3cff4e6c27988428b697f204faf90aa8a4a9d19d",
     "scripts/setup_papagei.sh": "65c96246058a7880521f6803a4b91842921fc7732436119d9c64697cf5e7d239",
     "scripts/setup_pulseppg.sh": "0f091373a16071c4f91bcaf8adb7eac5434f2d8d837ee83590c1bd3e54ae590a",
-    "src/ppg_bp_incremental/__init__.py": "001881ce1e636ccf622c566e229aa8576abfef75dca49b3b2e7a3155bd0ec92a",
-    "src/ppg_bp_incremental/cli.py": "77801723e3937dfe2eead6e627aaad3867479fff591cb959e3d19c44979c3353",
+    "src/ppg_bp_incremental/__init__.py": "1ce6b6ea2ade90b5f8c294f4b61d874a7fef3c64e8ec5f2bc7531d2bdb0208be",
+    "src/ppg_bp_incremental/cli.py": "c29a94fade72546dd4838f785376cdbfd93a62fe0398c8a00ace7392cf9e239c",
     "src/ppg_bp_incremental/data/__init__.py": "524cdee0e8a31aae959c737cf7e2aa1cf3777d298c378a72658c08bd1c5d5d77",
     "src/ppg_bp_incremental/data/benchmark.py": "1cd1f73cdbe50c184ca66b6f85f0c0928b3a0d2170f0cb23bb73e7015c6af0ad",
     "src/ppg_bp_incremental/data/benchmark_splits.py": "bf3aba8f9e63d0a73832335abd1a9e9a14fa20f0c011bb0d7de592f2f5d7e206",
@@ -90,7 +90,7 @@
     "tests/test_benchmark_evaluation.py": "02cd817a4178e9c5b16d7ff311567c0740894c43d47d0cb4079f10b88ff6d4f5",
     "tests/test_benchmark_splits.py": "6e24fc4e99b8caf55d52c121c7963b279879636486106c55a2fa640212972bfd",
     "tests/test_butppg.py": "2f380d594f73f51efd6bb9945bdbb5bf72f6bc646f0ab28a1cbdcfe26ad07f3c",
-    "tests/test_cli.py": "26cad1060fa82e6d9ae006bbf388427f581669c0ff026aa6eac49b87f862f16b",
+    "tests/test_cli.py": "6240bcd97b2f864397ec9915a686559c83814ad4f457431047000ecaf57f5f72",
     "tests/test_demographic_influence.py": "74c133476828ac237ba3f16f8c24a06b51441155ccde5dd5967d9731ce89d3d3",
     "tests/test_encoder_contract.py": "4e19611475e434d1bb84ad5e0a4e5511dd0dbfc6b18ebc117e16668165e49743",
     "tests/test_finetune_stabilization_v3.py": "875f861be7b3785754d6c82fb353d2318f5edae3741692cf037a5ec647beb84b",
@@ -108,6 +108,6 @@
   },
   "release_candidate": "paper-code-v2",
   "scientific_file_count": 47,
-  "scientific_tree_sha256": "c4461fd6e7e661fae5329cd1fc4a6ae63352a8c3ba20a9c3cd7a516d662ef2b6",
-  "software_version": "0.4.0"
+  "scientific_tree_sha256": "c3f78f4e00a5f0a56e1233f3d062dbc61ef8ba0974acb1686a49791222f58385",
+  "software_version": "0.4.1"
 }

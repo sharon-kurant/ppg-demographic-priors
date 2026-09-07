@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import argparse
 
+import pandas as pd
 import pytest
 
 from ppg_bp_incremental.cli import (
     PUBLIC_COMMANDS,
     _parser,
     _validate_embedding_identity,
+    main,
 )
 
 
@@ -173,3 +175,50 @@ def test_release_cli_rejects_embedding_model_mismatch() -> None:
             {"encoder": {"model_name": "pulseppg"}},
             "anyppg",
         )
+
+
+def test_aggregate_exports_seed_specific_outputs(monkeypatch, tmp_path) -> None:
+    import ppg_bp_incremental.evaluation.benchmark as benchmark
+
+    predictions = pd.DataFrame({"value": [1.0]})
+    units = pd.DataFrame({"unit": [1.0]})
+    metrics = pd.DataFrame({"metric": [1.0]})
+    seed_units = pd.DataFrame({"seed_unit": [1.0]})
+    seed_metrics = pd.DataFrame({"seed_metric": [1.0]})
+    effects = pd.DataFrame({"effect": [1.0]})
+    monkeypatch.setattr(
+        benchmark, "load_prediction_artifacts", lambda _paths: predictions
+    )
+    monkeypatch.setattr(
+        benchmark,
+        "summarize_benchmark",
+        lambda *_args, **kwargs: (
+            units,
+            metrics,
+            seed_units,
+            seed_metrics,
+        )
+        if kwargs.get("return_seed_details")
+        else (units, metrics),
+    )
+    monkeypatch.setattr(benchmark, "incremental_effects", lambda _metrics: effects)
+
+    output = tmp_path / "aggregate"
+    assert (
+        main(
+            [
+                "aggregate",
+                "--predictions",
+                str(tmp_path / "placeholder.csv"),
+                "--output-root",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    assert (output / "predictions.csv").is_file()
+    assert (output / "aggregated_predictions.csv").is_file()
+    assert (output / "seed_specific_aggregated_predictions.csv").is_file()
+    assert (output / "metrics.csv").is_file()
+    assert (output / "seed_metrics.csv").is_file()
+    assert (output / "incremental_effects.csv").is_file()

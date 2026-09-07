@@ -684,18 +684,24 @@ def main(argv: list[str] | None = None) -> int:
         predictions = load_prediction_artifacts(args.predictions)
         if args.require_complete_matrix:
             validate_complete_benchmark_matrix(predictions)
-        units, metrics = summarize_benchmark(
+        units, metrics, seed_units, seed_metrics = summarize_benchmark(
             predictions,
             args.bootstrap_replicates,
             args.bootstrap_confidence,
             args.seed,
             set(),
+            return_seed_details=True,
         )
         effects = incremental_effects(metrics)
         args.output_root.mkdir(parents=True, exist_ok=True)
         predictions.to_csv(args.output_root / "predictions.csv", index=False)
         units.to_csv(args.output_root / "aggregated_predictions.csv", index=False)
+        seed_units.to_csv(
+            args.output_root / "seed_specific_aggregated_predictions.csv",
+            index=False,
+        )
         metrics.to_csv(args.output_root / "metrics.csv", index=False)
+        seed_metrics.to_csv(args.output_root / "seed_metrics.csv", index=False)
         effects.to_csv(args.output_root / "incremental_effects.csv", index=False)
         _write_run_metadata(
             args.output_root / "aggregation.run.json",
@@ -704,6 +710,7 @@ def main(argv: list[str] | None = None) -> int:
                 "bootstrap_replicates": args.bootstrap_replicates,
                 "bootstrap_confidence": args.bootstrap_confidence,
                 "complete_matrix_required": bool(args.require_complete_matrix),
+                "seed_specific_outputs": True,
                 "target_scale": "raw_mmhg",
                 "contract_version": CONTRACT_VERSION,
             },

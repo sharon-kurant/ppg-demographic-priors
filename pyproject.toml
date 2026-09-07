@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ppg-demographic-priors"
-version = "0.4.0"
+version = "0.4.1"
 description = "Subject-disjoint evaluation of demographic priors with frozen and fine-tuned PPG foundation models"
 readme = "README.md"
 requires-python = ">=3.10"

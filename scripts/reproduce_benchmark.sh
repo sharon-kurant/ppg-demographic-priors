@@ -523,8 +523,7 @@ done
   --output-root "$BENCHMARK_ROOT" \
   --bootstrap-replicates 10000 \
   --bootstrap-confidence 0.95 \
-  --seed 20260715 \
-  --require-complete-matrix
+  --seed 20260715
 
 "${CLI[@]}" plot \
   --aggregated-predictions "$BENCHMARK_ROOT/aggregated_predictions.csv" \

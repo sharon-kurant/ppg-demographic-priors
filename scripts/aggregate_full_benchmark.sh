@@ -94,6 +94,8 @@ PREDICTIONS=("${FROZEN_PREDICTIONS[@]}" "${NEURAL_PREDICTIONS[@]}")
 "$PYTHON_BIN" "$REPO_ROOT/scripts/analyze_demographic_influence.py" \
   --aggregated-predictions "$BENCHMARK_ROOT/aggregated_predictions.csv" \
   --raw-predictions "$BENCHMARK_ROOT/predictions.csv" \
+  --seed-specific-aggregated-predictions \
+  "$BENCHMARK_ROOT/seed_specific_aggregated_predictions.csv" \
   --output-root "$INFLUENCE_ROOT" \
   --bootstrap-replicates 10000 \
   --bootstrap-confidence 0.95 \
