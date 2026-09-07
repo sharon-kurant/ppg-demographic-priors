@@ -32,6 +32,9 @@ RIDGE_CONDITIONS = (
     "frozen",
     "frozen_demographics",
 )
+FINETUNE_CONDITIONS = ("finetuned", "finetuned_demographics")
+FINETUNE_TARGETS = ("sbp", "dbp")
+FINETUNE_SEEDS = (17, 23, 42)
 PUBLIC_COMMANDS = frozenset(
     {
         "prepare",
@@ -41,6 +44,7 @@ PUBLIC_COMMANDS = frozenset(
         "audit-models",
         "extract",
         "run-ridge",
+        "run-finetune",
         "aggregate",
         "plot",
         "data-eda",
@@ -48,12 +52,19 @@ PUBLIC_COMMANDS = frozenset(
 )
 
 
+def _maximum_ten_epochs(value: str) -> int:
+    epochs = int(value)
+    if not 1 <= epochs <= 10:
+        raise argparse.ArgumentTypeError("must be between 1 and 10")
+    return epochs
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ppg-bp",
         description=(
             "Reproduce the subject-disjoint SBP/DBP benchmark for four frozen "
-            "PPG foundation models"
+            "and fine-tuned PPG foundation models"
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -166,6 +177,60 @@ def _parser() -> argparse.ArgumentParser:
         help="positive alpha grid selected by inner subject-disjoint MAE",
     )
     ridge.add_argument("--output", type=Path, required=True)
+
+    finetune = subparsers.add_parser(
+        "run-finetune",
+        help="run one subject-disjoint end-to-end fine-tuning identity",
+    )
+    finetune.add_argument("--input-csv", type=Path, required=True)
+    finetune.add_argument("--splits", type=Path, required=True)
+    finetune.add_argument("--model", choices=tuple(MODEL_SPECS), required=True)
+    finetune.add_argument(
+        "--condition", choices=FINETUNE_CONDITIONS, required=True
+    )
+    finetune.add_argument("--target", choices=FINETUNE_TARGETS, required=True)
+    finetune.add_argument("--fold", type=int, required=True)
+    finetune.add_argument("--seed", type=int, choices=FINETUNE_SEEDS, required=True)
+    finetune.add_argument(
+        "--encoder-learning-rate",
+        type=float,
+        help="defaults to 1e-5 for Pulse-PPG and 3e-5 for the other encoders",
+    )
+    finetune.add_argument("--head-learning-rate-multiplier", type=float, default=10.0)
+    finetune.add_argument("--batch-size", type=int, default=64)
+    finetune.add_argument("--max-epochs", type=_maximum_ten_epochs, default=10)
+    finetune.add_argument("--patience", type=int, default=3)
+    finetune.add_argument("--gradient-clip-norm", type=float, default=1.0)
+    finetune.add_argument("--num-workers", type=int, default=0)
+    finetune.add_argument(
+        "--mixed-precision", action=argparse.BooleanOptionalAction, default=True
+    )
+    finetune.add_argument(
+        "--standardize-embedding",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="defaults on for the reported Pulse-PPG stabilization and off otherwise",
+    )
+    finetune.add_argument(
+        "--freeze-bn-running-stats",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
+    finetune.add_argument(
+        "--zero-initialize-output-layer",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="defaults on for the reported Pulse-PPG stabilization and off otherwise",
+    )
+    finetune.add_argument("--device", default="auto")
+    finetune.add_argument("--repository", type=Path)
+    finetune.add_argument("--checkpoint", type=Path)
+    finetune.add_argument("--output-root", type=Path, required=True)
+    finetune.add_argument(
+        "--checkpoint-root",
+        type=Path,
+        help="optional transient checkpoint directory, preferably node-local",
+    )
 
     aggregate = subparsers.add_parser(
         "aggregate", help="combine predictions and calculate participant-balanced metrics"
@@ -461,6 +526,10 @@ def main(argv: list[str] | None = None) -> int:
                 "target_scale": "raw_mmhg",
                 "target_transform": "none",
                 "decoder": "identity",
+                "preprocessing_policy": preprocessing_policy,
+                "source_fidelity": sorted(
+                    set(predictions["source_fidelity"].astype(str))
+                ),
                 "split_fingerprint": str(splits["dataset_fingerprint"].iloc[0]),
                 "embedding_metadata": metadata,
                 "selected_hyperparameters": predictions[
@@ -489,16 +558,130 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Predictions: {args.output}")
         return 0
 
+    if args.command == "run-finetune":
+        from ppg_bp_incremental.training.finetune_v3 import (
+            FineTuneConfig,
+            prepare_waveforms,
+            run_finetuning_v3,
+            selection_artifact_path,
+        )
+
+        data = load_benchmark_manifest(args.input_csv)
+        splits = _load_splits(args.splits, data)
+        available_folds = set(pd.to_numeric(splits["fold"], errors="raise").astype(int))
+        if args.fold not in available_folds:
+            raise ValueError(f"Fold {args.fold} is absent from the locked split manifest")
+
+        encoder_learning_rate = (
+            float(args.encoder_learning_rate)
+            if args.encoder_learning_rate is not None
+            else (1e-5 if args.model == "pulseppg" else 3e-5)
+        )
+        if encoder_learning_rate <= 0:
+            raise ValueError("--encoder-learning-rate must be positive")
+        pulse_stabilization = args.model == "pulseppg"
+        standardize_embedding = (
+            pulse_stabilization
+            if args.standardize_embedding is None
+            else bool(args.standardize_embedding)
+        )
+        zero_initialize_output_layer = (
+            pulse_stabilization
+            if args.zero_initialize_output_layer is None
+            else bool(args.zero_initialize_output_layer)
+        )
+        config = FineTuneConfig(
+            batch_size=args.batch_size,
+            max_epochs=args.max_epochs,
+            patience=args.patience,
+            gradient_clip_norm=args.gradient_clip_norm,
+            head_learning_rate_multiplier=args.head_learning_rate_multiplier,
+            learning_rates=(encoder_learning_rate,),
+            mixed_precision=args.mixed_precision,
+            encoder_trainable=True,
+            num_workers=args.num_workers,
+            standardize_embedding=standardize_embedding,
+            freeze_batchnorm_running_stats=args.freeze_bn_running_stats,
+            zero_initialize_output_layer=zero_initialize_output_layer,
+        ).checked()
+
+        cohort = str(data["dataset"].iloc[0])
+        selection_path = selection_artifact_path(
+            args.output_root,
+            cohort=cohort,
+            model_key=args.model,
+            condition=args.condition,
+            target=args.target,
+            fold=args.fold,
+        )
+        reuse_selection = None
+        if args.seed != 17:
+            if not selection_path.is_file():
+                raise FileNotFoundError(
+                    "Seeds 23 and 42 reuse the seed-17 epoch selection. Run the "
+                    f"same identity with --seed 17 first: {selection_path}"
+                )
+            reuse_selection = selection_path
+
+        def encoder_factory(model_key: str, device: str):
+            return create_encoder(
+                model_key,
+                device=device,
+                repository=args.repository,
+                checkpoint=args.checkpoint,
+            )
+
+        preprocessing_encoder = encoder_factory(args.model, args.device)
+        prepared = prepare_waveforms(data, preprocessing_encoder)
+        prediction_path, metadata_path = run_finetuning_v3(
+            data,
+            splits,
+            model_key=args.model,
+            condition=args.condition,
+            target=args.target,
+            fold=args.fold,
+            seed=args.seed,
+            output_root=args.output_root,
+            checkpoint_root=args.checkpoint_root,
+            device=args.device,
+            config=config,
+            prepared_waveforms=prepared,
+            encoder_factory=encoder_factory,
+            reuse_selection=reuse_selection,
+        )
+        print(
+            "Fine-tuning run complete:",
+            json.dumps(
+                {
+                    "model": args.model,
+                    "condition": args.condition,
+                    "target": args.target,
+                    "fold": args.fold,
+                    "seed": args.seed,
+                    "encoder_learning_rate": encoder_learning_rate,
+                    "standardize_embedding": standardize_embedding,
+                    "freeze_batchnorm_running_stats": bool(
+                        args.freeze_bn_running_stats
+                    ),
+                    "zero_initialize_output_layer": zero_initialize_output_layer,
+                    "selection_reused": reuse_selection is not None,
+                    "predictions": str(prediction_path),
+                    "metadata": str(metadata_path),
+                },
+                sort_keys=True,
+            ),
+        )
+        return 0
+
     if args.command == "aggregate":
         from ppg_bp_incremental.evaluation.benchmark import (
             incremental_effects,
+            load_prediction_artifacts,
             summarize_benchmark,
             validate_complete_benchmark_matrix,
         )
 
-        predictions = pd.concat(
-            [pd.read_csv(path) for path in args.predictions], ignore_index=True
-        )
+        predictions = load_prediction_artifacts(args.predictions)
         if args.require_complete_matrix:
             validate_complete_benchmark_matrix(predictions)
         units, metrics = summarize_benchmark(

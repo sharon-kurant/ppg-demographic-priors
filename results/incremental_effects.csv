@@ -1,0 +1,73 @@
+dataset,model,target,preprocessing_policy,padding_policy,demographic_fields,effect,candidate_condition,reference_condition,delta_mae,delta_rmse
+BUT PPG,anyppg,dbp,source_consistent_filter_resample_zscore_adaptation,none,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.19043758071249073,-0.3166820700508062
+BUT PPG,anyppg,sbp,source_consistent_filter_resample_zscore_adaptation,none,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.3708338096920425,-0.4355254605167893
+BUT PPG,anyppg,dbp,source_consistent_filter_resample_zscore_adaptation,none,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-0.16356506160066164,0.4393160299850667
+BUT PPG,anyppg,sbp,source_consistent_filter_resample_zscore_adaptation,none,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-1.4823021172165163,-0.8698361669341335
+BUT PPG,handcrafted_ppg,dbp,handcrafted_morphology_and_statistics_v1,none,age/sex/BMI,demographics_added_to_ppg_features,ppg_features_demographics,ppg_features,0.11742796870575045,0.20084531783036574
+BUT PPG,handcrafted_ppg,sbp,handcrafted_morphology_and_statistics_v1,none,age/sex/BMI,demographics_added_to_ppg_features,ppg_features_demographics,ppg_features,-3.1986847909114573,-3.25130523681638
+BUT PPG,papagei_p,dbp,official_ppgbp_notebook_equivalent,none,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.1280098301778141,-0.0823530065848157
+BUT PPG,papagei_p,sbp,official_ppgbp_notebook_equivalent,none,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.6842154614558442,-0.9049827620449875
+BUT PPG,papagei_p,dbp,official_ppgbp_notebook_equivalent,none,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-0.296328322306584,-0.5175368738751587
+BUT PPG,papagei_p,sbp,official_ppgbp_notebook_equivalent,none,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-3.5356825560628042,-3.863920630185868
+BUT PPG,papagei_s,dbp,official_ppgbp_notebook_equivalent,none,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.06713356146202809,-0.029939478808223896
+BUT PPG,papagei_s,sbp,official_ppgbp_notebook_equivalent,none,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.6211422489973355,-0.8234843472540376
+BUT PPG,papagei_s,dbp,official_ppgbp_notebook_equivalent,none,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-0.26407345313833375,-0.28290667714198925
+BUT PPG,papagei_s,sbp,official_ppgbp_notebook_equivalent,none,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-3.9235722631122147,-4.169666827717826
+BUT PPG,pulseppg,dbp,official_ppgbp_script_equivalent,none,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.0021809292384755707,0.00048551873250168853
+BUT PPG,pulseppg,sbp,official_ppgbp_script_equivalent,none,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,0.04397004152488648,0.010196437577745243
+BUT PPG,pulseppg,dbp,official_ppgbp_script_equivalent,none,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-0.5947217382242673,-0.4982709309248001
+BUT PPG,pulseppg,sbp,official_ppgbp_script_equivalent,none,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-2.561250744477354,-2.8263053049519105
+PPG-BP,anyppg,dbp,source_consistent_filter_resample_zscore_adaptation,zero,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.15770901877219856,-0.07354188883980406
+PPG-BP,anyppg,sbp,source_consistent_filter_resample_zscore_adaptation,zero,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.9778449629629637,-1.1961710623761874
+PPG-BP,anyppg,dbp,source_consistent_filter_resample_zscore_adaptation,zero,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-0.5033621385615952,-0.40506959688225663
+PPG-BP,anyppg,sbp,source_consistent_filter_resample_zscore_adaptation,zero,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-0.5860590070518796,-0.976036805717305
+PPG-BP,handcrafted_ppg,dbp,handcrafted_morphology_and_statistics_v1,none,age/sex/BMI,demographics_added_to_ppg_features,ppg_features_demographics,ppg_features,-0.4327013758936751,-0.4662289426171764
+PPG-BP,handcrafted_ppg,sbp,handcrafted_morphology_and_statistics_v1,none,age/sex/BMI,demographics_added_to_ppg_features,ppg_features_demographics,ppg_features,-0.5737650385739475,-1.1022804142066
+PPG-BP,papagei_p,dbp,official_ppgbp_notebook_equivalent,zero,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.11822016539827374,-0.14911605596541833
+PPG-BP,papagei_p,sbp,official_ppgbp_notebook_equivalent,zero,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-1.2138070761034996,-1.3915868564911271
+PPG-BP,papagei_p,dbp,official_ppgbp_notebook_equivalent,zero,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-0.43200431694806696,-0.46188748612173036
+PPG-BP,papagei_p,sbp,official_ppgbp_notebook_equivalent,zero,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-1.0628275483293894,-1.4823152503678472
+PPG-BP,papagei_s,dbp,official_ppgbp_notebook_equivalent,zero,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.1402271440892946,-0.21020385187798674
+PPG-BP,papagei_s,sbp,official_ppgbp_notebook_equivalent,zero,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.7760977209538318,-0.8017148930347666
+PPG-BP,papagei_s,dbp,official_ppgbp_notebook_equivalent,zero,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-0.4771594393675578,-0.476592443769027
+PPG-BP,papagei_s,sbp,official_ppgbp_notebook_equivalent,zero,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-0.9457433745634898,-1.2919345850008739
+PPG-BP,pulseppg,dbp,official_ppgbp_script_equivalent,zero,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,0.014360746829019888,0.018002498875484108
+PPG-BP,pulseppg,sbp,official_ppgbp_script_equivalent,zero,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.004815775748355122,-0.0007046953015574786
+PPG-BP,pulseppg,dbp,official_ppgbp_script_equivalent,zero,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-0.7373139328162104,-0.6138772886633177
+PPG-BP,pulseppg,sbp,official_ppgbp_script_equivalent,zero,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-0.622208088682223,-0.90054828835558
+PulseDB-MIMIC,anyppg,dbp,source_consistent_filter_resample_zscore_adaptation,none,age/sex,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.26542764583262723,-0.20882725628949217
+PulseDB-MIMIC,anyppg,sbp,source_consistent_filter_resample_zscore_adaptation,none,age/sex,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.026431577091969416,0.032216790013972485
+PulseDB-MIMIC,anyppg,dbp,source_consistent_filter_resample_zscore_adaptation,none,age/sex,demographics_added_to_frozen,frozen_demographics,frozen,-0.2894596243909895,-0.3076209339113696
+PulseDB-MIMIC,anyppg,sbp,source_consistent_filter_resample_zscore_adaptation,none,age/sex,demographics_added_to_frozen,frozen_demographics,frozen,-0.02207669171634663,0.005255139994265079
+PulseDB-MIMIC,handcrafted_ppg,dbp,handcrafted_morphology_and_statistics_v1,none,age/sex,demographics_added_to_ppg_features,ppg_features_demographics,ppg_features,-0.2834964405836047,-0.308124482766976
+PulseDB-MIMIC,handcrafted_ppg,sbp,handcrafted_morphology_and_statistics_v1,none,age/sex,demographics_added_to_ppg_features,ppg_features_demographics,ppg_features,0.09325017165279448,0.1511947334328667
+PulseDB-MIMIC,papagei_p,dbp,official_ppgbp_notebook_equivalent,none,age/sex,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.322652174176449,-0.27057668824077297
+PulseDB-MIMIC,papagei_p,sbp,official_ppgbp_notebook_equivalent,none,age/sex,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.008889182094616643,0.0062221762273679815
+PulseDB-MIMIC,papagei_p,dbp,official_ppgbp_notebook_equivalent,none,age/sex,demographics_added_to_frozen,frozen_demographics,frozen,-0.33239238311441,-0.3704449479628096
+PulseDB-MIMIC,papagei_p,sbp,official_ppgbp_notebook_equivalent,none,age/sex,demographics_added_to_frozen,frozen_demographics,frozen,0.015092001934689847,0.019475753318392464
+PulseDB-MIMIC,papagei_s,dbp,official_ppgbp_notebook_equivalent,none,age/sex,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.4128515529023229,-0.35799568574938867
+PulseDB-MIMIC,papagei_s,sbp,official_ppgbp_notebook_equivalent,none,age/sex,demographics_added_to_finetuned,finetuned_demographics,finetuned,0.1218160561704309,0.16513079516910878
+PulseDB-MIMIC,papagei_s,dbp,official_ppgbp_notebook_equivalent,none,age/sex,demographics_added_to_frozen,frozen_demographics,frozen,-0.30388201097354894,-0.3187977403683835
+PulseDB-MIMIC,papagei_s,sbp,official_ppgbp_notebook_equivalent,none,age/sex,demographics_added_to_frozen,frozen_demographics,frozen,0.017158637085838535,0.034607418850988836
+PulseDB-MIMIC,pulseppg,dbp,official_ppgbp_script_equivalent,none,age/sex,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.009619405895305633,0.054340490274590536
+PulseDB-MIMIC,pulseppg,sbp,official_ppgbp_script_equivalent,none,age/sex,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.05058359310439897,-0.011050142406109131
+PulseDB-MIMIC,pulseppg,dbp,official_ppgbp_script_equivalent,none,age/sex,demographics_added_to_frozen,frozen_demographics,frozen,-0.3183600158044051,-0.3005198223933885
+PulseDB-MIMIC,pulseppg,sbp,official_ppgbp_script_equivalent,none,age/sex,demographics_added_to_frozen,frozen_demographics,frozen,0.008346195258095435,0.026024532758803787
+PulseDB-Vital,anyppg,dbp,source_consistent_filter_resample_zscore_adaptation,none,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.33281640404517177,-0.37370000831302264
+PulseDB-Vital,anyppg,sbp,source_consistent_filter_resample_zscore_adaptation,none,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.29431495666104013,-0.360321212721761
+PulseDB-Vital,anyppg,dbp,source_consistent_filter_resample_zscore_adaptation,none,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-0.17992728178039208,-0.17186875897222187
+PulseDB-Vital,anyppg,sbp,source_consistent_filter_resample_zscore_adaptation,none,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-0.12102756796189595,-0.12646879732203686
+PulseDB-Vital,handcrafted_ppg,dbp,handcrafted_morphology_and_statistics_v1,none,age/sex/BMI,demographics_added_to_ppg_features,ppg_features_demographics,ppg_features,-0.22630161366877743,-0.21318737666417675
+PulseDB-Vital,handcrafted_ppg,sbp,handcrafted_morphology_and_statistics_v1,none,age/sex/BMI,demographics_added_to_ppg_features,ppg_features_demographics,ppg_features,-0.06070856161491811,-0.027295653729517255
+PulseDB-Vital,papagei_p,dbp,official_ppgbp_notebook_equivalent,none,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.10385373683916121,-0.06774402750412456
+PulseDB-Vital,papagei_p,sbp,official_ppgbp_notebook_equivalent,none,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.10957883423439263,-0.10139673400624005
+PulseDB-Vital,papagei_p,dbp,official_ppgbp_notebook_equivalent,none,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-0.19736488434440602,-0.1719267179068833
+PulseDB-Vital,papagei_p,sbp,official_ppgbp_notebook_equivalent,none,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-0.08144656145166707,-0.09827858686642443
+PulseDB-Vital,papagei_s,dbp,official_ppgbp_notebook_equivalent,none,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.10283994354050563,-0.020048244363875867
+PulseDB-Vital,papagei_s,sbp,official_ppgbp_notebook_equivalent,none,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.3318929589683943,-0.428122946292504
+PulseDB-Vital,papagei_s,dbp,official_ppgbp_notebook_equivalent,none,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-0.18100798122721784,-0.17047596512944097
+PulseDB-Vital,papagei_s,sbp,official_ppgbp_notebook_equivalent,none,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-0.13685477532805912,-0.173210706661294
+PulseDB-Vital,pulseppg,dbp,official_ppgbp_script_equivalent,none,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,0.009433350386434114,0.009741748660900384
+PulseDB-Vital,pulseppg,sbp,official_ppgbp_script_equivalent,none,age/sex/BMI,demographics_added_to_finetuned,finetuned_demographics,finetuned,-0.05533521028435473,-0.09118304606067795
+PulseDB-Vital,pulseppg,dbp,official_ppgbp_script_equivalent,none,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-0.19678088340080535,-0.18242998435843383
+PulseDB-Vital,pulseppg,sbp,official_ppgbp_script_equivalent,none,age/sex/BMI,demographics_added_to_frozen,frozen_demographics,frozen,-0.10063006909388506,-0.10924597612637399

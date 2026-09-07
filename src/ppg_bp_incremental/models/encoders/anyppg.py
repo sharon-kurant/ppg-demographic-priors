@@ -17,6 +17,7 @@ from ppg_bp_incremental.models.encoders.base import (
 )
 from ppg_bp_incremental.models.contracts import CONTRACT_VERSION, MODEL_CONTRACTS
 from ppg_bp_incremental.models.encoders.source_integrity import (
+    load_torch_checkpoint,
     verify_checkpoint_sha256,
     verify_git_checkout,
 )
@@ -28,17 +29,23 @@ ANYPPG_TARGET_RATE_HZ = 125
 ANYPPG_INPUT_SAMPLES = 1250
 ANYPPG_EMBEDDING_DIMENSION = 512
 ANYPPG_ZSCORE_EPSILON = 1e-5
+ANYPPG_PREPROCESSING_POLICY = (
+    "source_consistent_filter_resample_zscore_adaptation"
+)
 
 
 def preprocess_anyppg(
     signal: np.ndarray,
     sampling_rate_hz: int,
 ) -> np.ndarray:
-    """Apply the public AnyPPG source order to one 10-second input.
+    """Apply the source-consistent AnyPPG adaptation to one 10-second input.
 
     The third-order Butterworth coefficients and zero-phase filtering match the
     upstream ``mne.filter.filter_data(..., method="iir",
     iir_params={"order": 3, "ftype": "butter", "output": "ba"})`` contract.
+    The exact public construction of AnyPPG's downstream BP arrays is not
+    released, so this operation sequence is not labeled an exact inference
+    pipeline.
     """
     signal = np.asarray(signal, dtype=np.float64).reshape(-1)
     if signal.size < 2 or not np.isfinite(signal).all():
@@ -131,11 +138,7 @@ class AnyPPGEncoder(PPGEncoder):
             use_do=True,
             verbose=False,
         )
-        state_dict = torch.load(
-            self.checkpoint_path,
-            map_location="cpu",
-            weights_only=True,
-        )
+        state_dict = load_torch_checkpoint(self.checkpoint_path)
         self.model.load_state_dict(state_dict, strict=True)
         self.model.to(self.device)
         self.model.eval()
@@ -191,7 +194,7 @@ class AnyPPGEncoder(PPGEncoder):
             checkpoint_sha256=self.checkpoint_sha256,
             repository_commit=self.repository_commit,
             preprocessing={
-                "name": "official_public_inference_contract",
+                "name": ANYPPG_PREPROCESSING_POLICY,
                 "resampling": "scipy.signal.resample_poly",
                 "long_signal_handling": "forbidden",
                 "normalization": "per_signal_zscore",

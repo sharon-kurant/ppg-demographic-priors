@@ -108,3 +108,19 @@ def verify_git_checkout(
             f"{expected}: {changed}"
         )
     return commit.lower()
+
+def load_torch_checkpoint(path: str | Path, *, map_location: str = "cpu"):
+    """Load a checkpoint safely across the cluster's supported PyTorch builds.
+
+    Newer PyTorch releases expose ``weights_only``; the CUDA 11.3 compatibility
+    environment required by the legacy A100 driver uses PyTorch 1.12.  All
+    checkpoint hashes are verified before this helper is called, so the
+    fallback does not weaken the source-integrity boundary.
+    """
+
+    import torch
+
+    try:
+        return torch.load(path, map_location=map_location, weights_only=True)
+    except TypeError:  # PyTorch < 2.0
+        return torch.load(path, map_location=map_location)

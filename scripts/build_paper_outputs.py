@@ -33,6 +33,16 @@ def main() -> None:
         default=Path("results/demographics_prediction_spread.csv"),
     )
     parser.add_argument(
+        "--fine-tuning-contrasts",
+        type=Path,
+        default=Path("results/fine_tuning_paired_contrasts.csv"),
+    )
+    parser.add_argument(
+        "--without-fine-tuning",
+        action="store_true",
+        help="build only the frozen/Ridge demographic summary",
+    )
+    parser.add_argument(
         "--aggregated-predictions",
         type=Path,
         help="recalculate spread from local participant-level outputs",
@@ -49,6 +59,12 @@ def main() -> None:
         ),
         aggregated_predictions_csv=args.aggregated_predictions,
         output_root=args.output_root,
+        fine_tuning_contrasts_csv=(
+            args.fine_tuning_contrasts
+            if not args.without_fine_tuning
+            and args.fine_tuning_contrasts.is_file()
+            else None
+        ),
     )
     for name, path in outputs.items():
         print(f"{name}: {path}")

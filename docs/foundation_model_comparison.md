@@ -1,7 +1,7 @@
 # Source-audited foundation-model comparison
 
 This is the literature and executable-code report for contract
-`source-faithful-v2`. It is deliberately separate from the empirical benchmark
+`source-faithful-v3`. It is deliberately separate from the empirical benchmark
 report. Published numbers below are context; they are not pooled with our new
 predictions.
 
@@ -18,8 +18,8 @@ Primary sources:
 
 | Model | Architecture and parameters | Active downstream input | Pooling | Native checkpoint output | Selected BP representation |
 |---|---|---|---|---|---|
-| PaPaGei-P | 18-block ResNet1D; 4,993,024 | 10 s at 125 Hz; `(B,1,1250)` | backbone pooling plus projection | projected `(B,512)`; pooled `(B,512)` | projected embedding |
-| PaPaGei-S | 18-block ResNet1D MoE; 5,785,612 | 10 s at 125 Hz; `(B,1,1250)` | backbone pooling plus projection | projected `(B,512)`; IPA `(B,1)`; SQI `(B,1)`; pooled `(B,512)` | projected embedding |
+| PaPaGei-P | 18-block ResNet1D; 4,993,024 | 10 s at 125 Hz; `(B,1,1250)` | backbone pooling plus downstream dense layer | downstream dense `(B,512)`; pooled `(B,512)` | downstream dense embedding |
+| PaPaGei-S | 18-block ResNet1D MoE; 5,785,612 | 10 s at 125 Hz; `(B,1,1250)` | backbone pooling plus downstream dense layer | downstream dense `(B,512)`; IPA `(B,1)`; SQI `(B,1)`; pooled `(B,512)` | downstream dense embedding |
 | Pulse-PPG | 12 residual blocks/26 convolutions; 28,497,920 | BP path: 10 s at 50 Hz; `(B,1,500)` | released checkpoint uses max | embedding `(B,512)` | returned embedding |
 | AnyPPG | ResNet-derived Net1D; 4,044,272 | 10 s at 125 Hz; `(B,1,1250)` | temporal mean | embedding `(B,512)` | returned embedding |
 
@@ -27,6 +27,19 @@ For PaPaGei/Pulse-PPG downstream preprocessing, the pinned pyPPG-equivalent
 implementation runs its 50 ms PPG smoothing branch only when the source rate is
 at least 75 Hz. Consequently, it is applied to PPG-BP and PulseDB but skipped
 for the 30 Hz BUT PPG adaptation.
+
+## Active downstream preprocessing contracts
+
+| Model | Ordered waveform operations before the checkpoint | Fidelity boundary |
+|---|---|---|
+| PaPaGei-P/S | on PPG-BP only, remove the final stored sample; per-record z-score; 0.5–12 Hz fourth-order Chebyshev-II/20 dB band-pass; 50 ms smoothing when source rate is at least 75 Hz; polyphase resampling to 125 Hz; symmetric zero-padding only for short PPG-BP | released-exact on PPG-BP; source-consistent cross-cohort adaptation elsewhere |
+| Pulse-PPG | on PPG-BP only, remove the final stored sample; released PPG-BP z-score/filter/smoothing sequence; polyphase resampling to 50 Hz; symmetric zero-padding only for short PPG-BP | released-exact on PPG-BP; source-consistent cross-cohort adaptation elsewhere |
+| AnyPPG | MNE zero-phase 0.5–8 Hz third-order Butterworth filter; polyphase resampling to 125 Hz; one checkpoint-facing time-axis z-score; symmetric zero-padding only for short PPG-BP | source-consistent adaptation because exact downstream BP-array construction is unavailable |
+
+PulseDB inputs are raw `PPG_Record`, not an already normalized or filtered
+field. Thus every contract performs its own filtering exactly once. PPG-BP is
+the only active cohort requiring duration padding; PulseDB and BUT PPG are
+already ten seconds long.
 
 Checkpoint SHA-256 values are, respectively,
 `3a6850961af527cbb2e476d3ad0bb374ae86ed86ffdd55b0b0d7e2f49451518e`,
@@ -36,8 +49,9 @@ and
 `99b9bb0a3c2b83a1f5d8ca2963fbd25329b6530e8d337de8825722fc6fd5f4fa`.
 
 Native outputs are not BP predictions and have no inferred BP units. In the
-active benchmark, only the separately fitted SBP or DBP Ridge estimator emits a
-BP-task output.
+active benchmark, only an explicit target-specific estimator emits a BP-task
+output: Ridge for frozen probes or the benchmark-defined neural head for
+end-to-end fine-tuning.
 
 ## Pretraining comparison
 
@@ -86,6 +100,39 @@ are recorded here rather than silently choosing one.
 | Pulse-PPG fine-tuned | paper specifies `512→128→GELU→1`, MSE, Adam | target transform and decoder are not disclosed in released code | PPG-BP | no | 12.33 / 8.695 |
 | AnyPPG linear probe | standardized embedding + Ridge; inner five-fold selection | released probe pattern uses supplied labels directly; identity decode | BUT PPG and UCI-BP; paper uses official or 80/20 protocols depending on identifiable subjects | no | BUT 13.31 / 9.62; UCI 15.62 / 7.14 |
 
+## Common benchmark fine-tuning adapter
+
+The active end-to-end experiment deliberately uses one declared BP adapter
+across all four checkpoints so that the encoder update itself can be compared:
+
+`selected 512-D representation [ + demographics ] -> Linear(128) -> GELU -> Linear(1)`
+
+The scalar estimates a BP z-score fitted only on the selection-training pool or
+the full-development refit pool, as appropriate. The recorded affine inverse
+transform returns the output to raw mmHg. This transform is part of supervised
+training and is not test-time calibration. SBP and DBP use separate models.
+
+The complete selected encoder path and the BP head are trainable. PaPaGei-S's
+IPA and SQI values remain recorded native outputs but their auxiliary heads are
+excluded from BP optimization. The loss is participant-balanced z-score MSE.
+Training uses Adam, a head learning rate ten times the encoder rate, gradient
+clipping at 1.0, batch size 64, validation-MAE epoch selection, and at most ten
+epochs. It is a `source_consistent_adaptation`, not a released-exact BP recipe.
+
+This distinction is essential when comparing with published results. The
+Pulse-PPG paper specifies the same 512-to-128-to-1 topology, GELU, MSE, and
+Adam, but its regression code and BP target transform are unavailable.
+PaPaGei and AnyPPG do not release an end-to-end BP fine-tuning recipe for these
+cohorts. Their published values therefore remain literature context rather
+than validation targets for the common adapter.
+
+The raw Pulse-PPG embedding produced substantially larger gradients under the
+common neural head than the other encoders. The audited post-diagnostic
+sensitivity therefore adds a fixed epoch-zero standardizer fitted only on the
+applicable training pool and zero-initializes the scalar output layer. This
+changes optimization, not the waveform input contract or target decoder. Its
+results are reported separately from the prespecified unstandardized run.
+
 Vital Videos and PulseDB-Vital are distinct cohorts. The PaPaGei paper describes
 Vital Videos as an ongoing study of 231 participants from Europe and
 Sub-Saharan Africa. It is not one of our benchmark cohorts and its published
@@ -116,8 +163,9 @@ prose is not used to calculate our benchmark effects.
   follows executable code.
 - Pulse-PPG describes a regression fine-tuning head and MSE but does not release
   the corresponding regression training path or disclose a BP target transform.
-  Therefore its fine-tuned numbers remain literature context and no neural
-  Pulse-PPG result is active.
+  Its published fine-tuned number remains literature context. Our active
+  neural Pulse-PPG result is explicitly labeled a common benchmark
+  reconstruction rather than released-exact reproduction.
 - AnyPPG releases the encoder and generic linear-probe code, but not the exact
   construction of every downstream `.npz`, including BUT PPG/UCI-BP. Our
   downstream preparation is labeled `source_consistent_adaptation`, not exact

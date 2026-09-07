@@ -14,6 +14,7 @@ import tempfile
 import numpy as np
 import pandas as pd
 
+from ppg_bp_incremental.models.contracts import CONTRACT_VERSION
 from ppg_bp_incremental.models.encoders.base import EncoderFingerprint
 
 
@@ -136,13 +137,38 @@ def save_embedding_artifact(
     return artifact_path
 
 
-def load_embedding_artifact(path: str | Path) -> tuple[np.ndarray, pd.DataFrame, dict]:
+def load_embedding_artifact(
+    path: str | Path,
+    *,
+    allow_stale_source_faithful: bool = False,
+) -> tuple[np.ndarray, pd.DataFrame, dict]:
+    """Load and validate a representation artifact.
+
+    Source-faithful benchmark artifacts are contract-bound.  After a waveform
+    contract changes, the old bytes remain available for historical inspection
+    through an explicit opt-in, but active callers cannot silently consume them
+    under the current benchmark version.
+    """
+
     path = Path(path)
     embedding_path = path / "embeddings.npy"
     index_path = path / "index.csv"
     metadata_path = path / "metadata.json"
     with metadata_path.open("r", encoding="utf-8") as handle:
         metadata = json.load(handle)
+    recorded_contract = str(
+        metadata.get("encoder", {}).get("contract_version", "")
+    )
+    if (
+        recorded_contract.startswith("source-faithful-")
+        and recorded_contract != CONTRACT_VERSION
+        and not allow_stale_source_faithful
+    ):
+        raise ValueError(
+            "Stale source-faithful embedding artifact: artifact uses "
+            f"{recorded_contract!r}, active contract is {CONTRACT_VERSION!r}. "
+            "Regenerate the embedding or explicitly opt in for historical inspection."
+        )
     if _file_sha256(embedding_path) != metadata["embeddings_sha256"]:
         raise ValueError("Embedding matrix checksum mismatch")
     if _file_sha256(index_path) != metadata["index_sha256"]:

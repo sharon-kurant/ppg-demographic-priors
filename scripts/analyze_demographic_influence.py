@@ -30,6 +30,14 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--seed-specific-aggregated-predictions",
+        type=Path,
+        help=(
+            "seed-preserving aggregate units used for formal fine-tuning "
+            "paired contrasts"
+        ),
+    )
+    parser.add_argument(
         "--output-root",
         type=Path,
         default=Path(
@@ -43,6 +51,9 @@ def main() -> None:
     paths = save_demographic_influence_analysis(
         aggregated_predictions_csv=args.aggregated_predictions,
         raw_predictions_csv=args.raw_predictions,
+        seed_specific_aggregated_predictions_csv=(
+            args.seed_specific_aggregated_predictions
+        ),
         output_root=args.output_root,
         bootstrap=BootstrapSpec(
             replicates=args.bootstrap_replicates,

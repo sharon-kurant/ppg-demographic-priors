@@ -1,0 +1,17 @@
+# Runtime recorded by the end-to-end fine-tuning jobs. CUDA drivers and system
+# libraries are platform supplied and are not represented as a solver lock.
+name: ppg-demographic-priors-finetuning
+channels:
+  - pytorch
+  - conda-forge
+dependencies:
+  - python=3.10.19
+  - numpy=1.26.4
+  - pandas=2.2.3
+  - scipy
+  - scikit-learn
+  - pyyaml
+  - h5py
+  - mne=1.10.2
+  - pytorch=1.12.1
+  - cudatoolkit=11.3

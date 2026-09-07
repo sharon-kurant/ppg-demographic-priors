@@ -72,7 +72,12 @@ def _bandpower(frequencies: np.ndarray, power: np.ndarray, low: float, high: flo
     selected = (frequencies >= low) & (frequencies < high)
     if np.count_nonzero(selected) < 2:
         return 0.0
-    return float(np.trapezoid(power[selected], frequencies[selected]))
+    # NumPy 1.26 calls the same trapezoidal integration routine ``trapz``;
+    # NumPy 2.x exposes the clearer ``trapezoid`` name.
+    integrate = getattr(np, "trapezoid", None)
+    if integrate is None:  # NumPy < 2.0
+        integrate = np.trapz
+    return float(integrate(power[selected], frequencies[selected]))
 
 
 def extract_handcrafted_features(

@@ -1,0 +1,43 @@
+{
+  "accepted": true,
+  "checks": {
+    "metric_identity_complete": true,
+    "nonreplacement_point_tolerance": 1e-12,
+    "only_pulse_finetuned_point_metrics_changed": true,
+    "primary_artifacts_modified": false,
+    "sensitivity_acceptance_passed": true
+  },
+  "counts": {
+    "amended_metric_rows": 152,
+    "primary_metric_rows": 152,
+    "replaced_pulse_metric_rows": 16,
+    "stabilized_finetune_runs": 240,
+    "stabilized_lower_mae_than_matched_frozen_rows": 6,
+    "stabilized_lower_mae_than_raw_rows": 16,
+    "stabilized_selection_artifacts": 80
+  },
+  "gradient_norms": {
+    "median_ratio_stabilized_over_raw": 0.028599433947121528,
+    "raw_unstandardized": {
+      "maximum": 2680.734619140625,
+      "mean": 622.6004176457723,
+      "median": 552.1278686523438,
+      "minimum": 224.74420166015625,
+      "runs": 240
+    },
+    "stabilized": {
+      "maximum": 51.164337158203125,
+      "mean": 16.426701925198238,
+      "median": 15.790544509887695,
+      "minimum": 4.4830522537231445,
+      "runs": 240
+    }
+  },
+  "input_sha256": {
+    "amended_metrics_sha256": "8229b1a80b2badd69694497faffdc88038671796b21be9a0d438f3ee22af7960",
+    "primary_metrics_sha256": "edea16649ee295509a9fae6455430e4620cde610c8de47704083f0a01110fa57",
+    "sensitivity_acceptance_receipt_sha256": "750f8910c4efbd9f1dd3007a5fcb2517184bbd660a790beebe7492763fa86a97"
+  },
+  "schema_version": "pulseppg-stabilization-amendment-v1",
+  "scope": "Isolated amended matrix: frozen/Ridge and non-Pulse neural artifacts are unchanged; 16 Pulse-PPG fine-tuned metric rows use the audited embedding-standardized, zero-output-initialized sensitivity."
+}

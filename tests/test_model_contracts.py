@@ -13,7 +13,7 @@ from ppg_bp_incremental.models.contracts import (
 
 
 def test_versioned_registry_locks_every_native_component_and_bp_adapter():
-    assert CONTRACT_VERSION == "source-faithful-v2"
+    assert CONTRACT_VERSION == "source-faithful-v3"
     assert set(MODEL_CONTRACTS) == {
         "papagei_p",
         "papagei_s",
@@ -21,9 +21,9 @@ def test_versioned_registry_locks_every_native_component_and_bp_adapter():
         "anyppg",
     }
     expected_components = {
-        "papagei_p": ["projected_embedding", "pooled_embedding"],
+        "papagei_p": ["downstream_dense_embedding", "pooled_embedding"],
         "papagei_s": [
-            "projected_embedding",
+            "downstream_dense_embedding",
             "ipa",
             "sqi",
             "pooled_embedding",
@@ -47,6 +47,13 @@ def test_versioned_registry_locks_every_native_component_and_bp_adapter():
     assert set(payload["models"]) == set(MODEL_CONTRACTS)
     assert MODEL_CONTRACTS["pulseppg"].preprocessing_operations[0] == (
         "for PPG-BP only, discard the final raw sample as in released PPGBP.py"
+    )
+    for model in ("papagei_p", "papagei_s"):
+        assert MODEL_CONTRACTS[model].preprocessing_operations[0] == (
+            "for PPG-BP only, discard the final raw sample as in the released notebook"
+        )
+    assert MODEL_CONTRACTS["pulseppg"].preprocessing_operations[3] == (
+        "50 ms zero-phase moving-average smoothing when source rate is at least 75 Hz"
     )
 
 
@@ -91,7 +98,10 @@ def test_bp_task_decoder_never_infers_units_from_shape():
 def test_source_fidelity_marks_exact_adapted_and_pretraining_overlap_paths():
     assert source_fidelity("papagei_p", "PPG-BP") == "released_exact"
     assert source_fidelity("pulseppg", "PPG-BP") == "released_exact"
-    assert source_fidelity("anyppg", "PulseDB-Vital") == "paper_specified"
+    assert (
+        source_fidelity("anyppg", "PulseDB-Vital")
+        == "source_consistent_adaptation"
+    )
     assert (
         source_fidelity("anyppg", "BUT PPG")
         == "source_consistent_adaptation"

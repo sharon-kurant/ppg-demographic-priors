@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from fractions import Fraction
 from math import ceil, gcd
 from pathlib import Path
 from types import ModuleType
+from typing import Literal
 import numpy as np
 from scipy.signal import cheby2, filtfilt, resample_poly
 
@@ -16,6 +18,7 @@ from ppg_bp_incremental.models.encoders.base import (
 )
 from ppg_bp_incremental.models.contracts import CONTRACT_VERSION, MODEL_CONTRACTS
 from ppg_bp_incremental.models.encoders.source_integrity import (
+    load_torch_checkpoint,
     verify_checkpoint_sha256,
     verify_git_checkout,
 )
@@ -29,6 +32,29 @@ PAPAGEI_CHECKPOINT_SHA256 = {
 PAPAGEI_TARGET_RATE_HZ = 125
 PAPAGEI_INPUT_SAMPLES = 1250
 PAPAGEI_EMBEDDING_DIMENSION = 512
+PPGBP_DATASET_NAME = "PPG-BP"
+
+
+def trim_ppgbp_final_raw_sample(signal: np.ndarray) -> np.ndarray:
+    """Apply the released PPG-BP ``[:-1]`` operation before normalization."""
+
+    squeezed = np.asarray(signal).squeeze()
+    if squeezed.ndim != 1 or len(squeezed) < 3:
+        raise ValueError(
+            "Released PPG-BP final-sample trimming requires at least three raw samples"
+        )
+    return squeezed[:-1]
+
+
+def ppgbp_final_sample_trim_metadata(*, source: str) -> dict[str, object]:
+    """Return one canonical provenance record for the released PPG-BP trim."""
+
+    return {
+        "applied": True,
+        "samples_removed_from_end": 1,
+        "operation_order": "before_zscore_filter_resample_and_padding",
+        "source": source,
+    }
 
 
 def _resample(signal: np.ndarray, original_rate: int, target_rate: int) -> np.ndarray:
@@ -49,11 +75,13 @@ def preprocess_ppgbp_official(
     target_rate_hz: int,
     input_samples: int,
 ) -> np.ndarray:
-    """Reproduce the preprocessing shared by the official FM PPG-BP examples.
+    """Reproduce shared operations after dataset-specific raw preparation.
 
     The sequence is global z-score normalization, pyPPG-equivalent Chebyshev-II
-    band-pass and 50 ms smoothing, polyphase resampling to the requested model
-    rate, then symmetric zero padding to the requested model input length.
+    band-pass, conditional 50 ms smoothing at source rates of at least 75 Hz,
+    polyphase resampling to the requested model rate, then symmetric zero
+    padding to the requested model input length.  PaPaGei and Pulse-PPG wrappers
+    apply the released PPG-BP final-sample trim before entering this function.
     """
     signal = np.asarray(signal, dtype=np.float32).squeeze()
     if signal.ndim != 1 or len(signal) < 2:
@@ -98,13 +126,58 @@ def preprocess_ppgbp_official(
 def preprocess_papagei(
     signal: np.ndarray,
     sampling_rate_hz: int,
+    *,
+    dataset: str | None = None,
 ) -> np.ndarray:
+    if dataset == PPGBP_DATASET_NAME:
+        signal = trim_ppgbp_final_raw_sample(signal)
     return preprocess_ppgbp_official(
         signal,
         sampling_rate_hz,
         PAPAGEI_TARGET_RATE_HZ,
         PAPAGEI_INPUT_SAMPLES,
     )
+
+
+def papagei_preprocessing_shape_trace(
+    signal: np.ndarray,
+    sampling_rate_hz: int,
+    *,
+    dataset: str | None = None,
+) -> list[dict[str, object]]:
+    """Trace PaPaGei preprocessing, including the released PPG-BP trim."""
+
+    signal = np.asarray(signal)
+    if dataset != PPGBP_DATASET_NAME:
+        return ppgbp_preprocessing_shape_trace(
+            signal,
+            sampling_rate_hz,
+            PAPAGEI_TARGET_RATE_HZ,
+            PAPAGEI_INPUT_SAMPLES,
+        )
+
+    squeezed = signal.squeeze()
+    trimmed = trim_ppgbp_final_raw_sample(squeezed)
+    downstream = ppgbp_preprocessing_shape_trace(
+        trimmed,
+        sampling_rate_hz,
+        PAPAGEI_TARGET_RATE_HZ,
+        PAPAGEI_INPUT_SAMPLES,
+    )
+    return [
+        {
+            "name": "raw_waveform",
+            "shape": [int(squeezed.size)],
+            "sampling_rate_hz": sampling_rate_hz,
+        },
+        {
+            "name": "released_ppgbp_final_sample_trim",
+            "shape": [int(trimmed.size)],
+            "sampling_rate_hz": sampling_rate_hz,
+            "samples_removed_from_end": 1,
+        },
+        *downstream[1:],
+    ]
 
 
 def ppgbp_preprocessing_shape_trace(
@@ -209,11 +282,7 @@ class PapageiEncoder(PPGEncoder):
             self.model = module.ResNet1DMoE(**common, n_experts=3)
         else:
             self.model = module.ResNet1D(**common)
-        checkpoint = torch.load(
-            self.checkpoint_path,
-            map_location="cpu",
-            weights_only=True,
-        )
+        checkpoint = load_torch_checkpoint(self.checkpoint_path)
         state_dict = {
             key.removeprefix("module."): value for key, value in checkpoint.items()
         }
@@ -226,14 +295,38 @@ class PapageiEncoder(PPGEncoder):
     def preprocess(self, signal: np.ndarray, sampling_rate_hz: int) -> np.ndarray:
         return preprocess_papagei(signal, sampling_rate_hz)
 
+    def preprocess_for_dataset(
+        self,
+        signal: np.ndarray,
+        sampling_rate_hz: int,
+        *,
+        dataset: str,
+    ) -> np.ndarray:
+        return preprocess_papagei(
+            signal,
+            sampling_rate_hz,
+            dataset=dataset,
+        )
+
     def preprocessing_shape_trace(
         self, signal: np.ndarray, sampling_rate_hz: int
     ) -> list[dict[str, object]]:
-        return ppgbp_preprocessing_shape_trace(
+        return papagei_preprocessing_shape_trace(
             signal,
             sampling_rate_hz,
-            PAPAGEI_TARGET_RATE_HZ,
-            PAPAGEI_INPUT_SAMPLES,
+        )
+
+    def preprocessing_shape_trace_for_dataset(
+        self,
+        signal: np.ndarray,
+        sampling_rate_hz: int,
+        *,
+        dataset: str,
+    ) -> list[dict[str, object]]:
+        return papagei_preprocessing_shape_trace(
+            signal,
+            sampling_rate_hz,
+            dataset=dataset,
         )
 
     def encode(self, batch: np.ndarray) -> NativeEncoderOutput:
@@ -245,17 +338,26 @@ class PapageiEncoder(PPGEncoder):
         with torch.inference_mode():
             outputs = self.model(tensor)
         if self.variant == "s":
-            names = ("projected_embedding", "ipa", "sqi", "pooled_embedding")
+            names = (
+                "downstream_dense_embedding",
+                "ipa",
+                "sqi",
+                "pooled_embedding",
+            )
             semantics = {
-                "projected_embedding": "512-dimensional downstream representation",
+                "downstream_dense_embedding": (
+                    "512-dimensional dense-transformed downstream representation"
+                ),
                 "ipa": "raw inflection-point-area morphology prediction",
                 "sqi": "raw signal-quality-index morphology prediction",
                 "pooled_embedding": "512-dimensional pooled backbone representation",
             }
         else:
-            names = ("projected_embedding", "pooled_embedding")
+            names = ("downstream_dense_embedding", "pooled_embedding")
             semantics = {
-                "projected_embedding": "512-dimensional downstream representation",
+                "downstream_dense_embedding": (
+                    "512-dimensional dense-transformed downstream representation"
+                ),
                 "pooled_embedding": "512-dimensional pooled backbone representation",
             }
         if not isinstance(outputs, tuple) or len(outputs) != len(names):
@@ -266,7 +368,7 @@ class PapageiEncoder(PPGEncoder):
             name: value.detach().cpu().numpy() for name, value in zip(names, outputs)
         }
         return NativeEncoderOutput(
-            embedding=components["projected_embedding"],
+            embedding=components["downstream_dense_embedding"],
             components=components,
             component_semantics=semantics,
         )
@@ -287,11 +389,39 @@ class PapageiEncoder(PPGEncoder):
                 "filter_low_hz": 0.5,
                 "filter_high_hz": 12,
                 "smoothing_window_ms": 50,
+                "smoothing_applied_when_source_rate_hz_gte": 75,
                 "resampling": "scipy.signal.resample_poly",
                 "padding": "symmetric_zero_only_if_short_to_1250",
+                "dataset_specific_operations": {
+                    PPGBP_DATASET_NAME: {
+                        "final_raw_sample_trim": {
+                            "samples_removed_from_end": 1,
+                            "operation_order": (
+                                "before_zscore_filter_resample_and_padding"
+                            ),
+                            "source": "example_papagei.ipynb (PPG-BP preparation cell)",
+                        }
+                    }
+                },
                 "output_index": 0,
             },
             input_sampling_rate_hz=PAPAGEI_TARGET_RATE_HZ,
             input_samples=PAPAGEI_INPUT_SAMPLES,
             embedding_dimension=PAPAGEI_EMBEDDING_DIMENSION,
+        )
+
+    def fingerprint_for_dataset(self, dataset: str) -> EncoderFingerprint:
+        fingerprint = self.fingerprint()
+        if dataset != PPGBP_DATASET_NAME:
+            return fingerprint
+        preprocessing = dict(fingerprint.preprocessing)
+        preprocessing["ppgbp_final_raw_sample_trim"] = (
+            ppgbp_final_sample_trim_metadata(
+                source="example_papagei.ipynb (PPG-BP preparation cell)"
+            )
+        )
+        return replace(
+            fingerprint,
+            model_version=f"{fingerprint.model_version}-ppgbp-trim-v1",
+            preprocessing=preprocessing,
         )

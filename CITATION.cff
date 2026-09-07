@@ -1,8 +1,8 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite the accompanying paper and this software release."
 type: software
-title: "Demographic Priors and Frozen Photoplethysmography Foundation Models for Calibration-Free Blood Pressure Estimation"
-version: 0.3.0
+title: "Demographic Priors in Frozen and Fine-Tuned PPG Foundation Models for Calibration-Free Blood Pressure Estimation"
+version: 0.4.0
 date-released: 2026-09-07
 license: MIT
 repository-code: "https://github.com/sharon-kurant/ppg-demographic-priors"
@@ -13,8 +13,8 @@ authors:
     affiliation: "Faculty of Biomedical Engineering, Technion-IIT, Haifa, Israel"
 abstract: >-
   Reproducibility code for a subject-disjoint comparison of demographic
-  priors, handcrafted PPG features, and four frozen PPG foundation-model
-  representations for systolic and diastolic blood-pressure estimation.
+  priors, handcrafted PPG features, and four frozen and end-to-end fine-tuned
+  PPG foundation models for systolic and diastolic blood-pressure estimation.
 keywords:
   - photoplethysmography
   - blood pressure

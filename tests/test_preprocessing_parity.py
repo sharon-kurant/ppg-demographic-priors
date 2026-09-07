@@ -54,10 +54,12 @@ def test_papagei_matches_released_preprocessing_numerically_step_for_step():
         + 0.8 * np.sin(2 * np.pi * 1.1 * time)
         + 0.15 * np.sin(2 * np.pi * 5.3 * time)
     )
-    steps, expected = _released_ppgbp_reference(signal, rate, 125, 1250)
-    observed = preprocess_papagei(signal, rate)
+    # Pinned example_papagei.ipynb applies ``values.squeeze()[:-1]`` before
+    # torch_ecg z-normalization, filtering, resampling, and padding.
+    steps, expected = _released_ppgbp_reference(signal[:-1], rate, 125, 1250)
+    observed = preprocess_papagei(signal, rate, dataset="PPG-BP")
 
-    assert [len(step) for step in steps] == [2100, 2100, 2100, 2100, 263]
+    assert [len(step) for step in steps] == [2099, 2099, 2099, 2099, 263]
     np.testing.assert_allclose(observed, expected, rtol=1e-6, atol=1e-6)
     assert np.count_nonzero(observed[:493]) == 0
     assert np.count_nonzero(observed[-494:]) == 0
@@ -104,6 +106,25 @@ def test_released_pyppg_rule_skips_smoothing_for_30_hz_but_ppg():
     np.testing.assert_allclose(
         preprocess_pulseppg(signal, rate),
         pulse_expected,
+        rtol=1e-6,
+        atol=1e-6,
+    )
+
+
+def test_released_pyppg_smoothing_threshold_is_inclusive_at_75_hz():
+    rate = 75
+    time = np.arange(750) / rate
+    signal = np.sin(2 * np.pi * 1.2 * time) + 0.2 * np.sin(
+        2 * np.pi * 10.0 * time
+    )
+    steps, expected = _released_ppgbp_reference(signal, rate, 50, 500)
+
+    # Pinned pyPPG uses ``if s.fs >= 75``.  At exactly 75 Hz the 50 ms window
+    # rounds to four samples, and therefore changes the band-pass result.
+    assert not np.array_equal(steps[2], steps[3])
+    np.testing.assert_allclose(
+        preprocess_pulseppg(signal, rate, dataset="PulseDB-Vital"),
+        expected,
         rtol=1e-6,
         atol=1e-6,
     )

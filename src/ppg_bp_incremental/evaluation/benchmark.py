@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Iterable
 
 import numpy as np
 import pandas as pd
@@ -24,7 +26,17 @@ ACTIVE_CONDITIONS = {
     "ppg_features_demographics",
     "frozen",
     "frozen_demographics",
+    "finetuned",
+    "finetuned_demographics",
 }
+NEURAL_CONDITIONS = {"finetuned", "finetuned_demographics"}
+DEMOGRAPHIC_CONDITIONS = {
+    "demographics",
+    "ppg_features_demographics",
+    "frozen_demographics",
+    "finetuned_demographics",
+}
+NEURAL_SEEDS = {17, 23, 42}
 EXPECTED_DATASETS = {
     "PPG-BP",
     "PulseDB-Vital",
@@ -44,7 +56,12 @@ EXPECTED_METHODS = {
     *{
         (model, condition)
         for model in ("papagei_p", "papagei_s", "pulseppg", "anyppg")
-        for condition in ("frozen", "frozen_demographics")
+        for condition in (
+            "frozen",
+            "frozen_demographics",
+            "finetuned",
+            "finetuned_demographics",
+        )
     },
 }
 MODEL_DISPLAY = {
@@ -66,7 +83,78 @@ PAIRED_CONFIGURATIONS = (
     ("papagei_s", "frozen", "frozen_demographics", "Frozen PaPaGei-S"),
     ("pulseppg", "frozen", "frozen_demographics", "Frozen Pulse-PPG"),
     ("anyppg", "frozen", "frozen_demographics", "Frozen AnyPPG"),
+    ("papagei_p", "finetuned", "finetuned_demographics", "Fine-tuned PaPaGei-P"),
+    ("papagei_s", "finetuned", "finetuned_demographics", "Fine-tuned PaPaGei-S"),
+    ("pulseppg", "finetuned", "finetuned_demographics", "Fine-tuned Pulse-PPG"),
+    ("anyppg", "finetuned", "finetuned_demographics", "Fine-tuned AnyPPG"),
 )
+
+
+def load_prediction_artifacts(paths: Iterable[str | Path]) -> pd.DataFrame:
+    """Load raw run predictions and attach auditable decoder parameters.
+
+    Fine-tuning jobs keep the development-pool target transform in the sibling
+    ``run.json``. This loader copies those parameters into every prediction row
+    before validation, allowing the final mmHg value to be checked numerically
+    without modifying already-running jobs. Ridge's identity decoder is encoded
+    as mean zero and scale one.
+    """
+
+    frames: list[pd.DataFrame] = []
+    for source in paths:
+        path = Path(source)
+        frame = pd.read_csv(path)
+        neural = frame["condition"].isin(NEURAL_CONDITIONS)
+        if neural.any():
+            if not neural.all():
+                raise ValueError(
+                    f"{path} mixes fine-tuned and non-neural prediction rows"
+                )
+            metadata_path = path.with_name("run.json")
+            if not metadata_path.is_file():
+                raise ValueError(
+                    f"Fine-tuned predictions lack sibling metadata: {metadata_path}"
+                )
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            transform = metadata.get("development_target_transform", {})
+            mean_mmhg = float(transform.get("mean_mmhg", np.nan))
+            standard_deviation_mmhg = float(
+                transform.get("standard_deviation_mmhg", np.nan)
+            )
+            if not np.isfinite(mean_mmhg) or not (
+                np.isfinite(standard_deviation_mmhg)
+                and standard_deviation_mmhg > 0
+            ):
+                raise ValueError(
+                    f"{metadata_path} has an invalid affine BP decoder"
+                )
+            identity = {
+                "dataset": str(frame["dataset"].iloc[0]),
+                "model": str(frame["model"].iloc[0]),
+                "condition": str(frame["condition"].iloc[0]),
+                "target": str(frame["target"].iloc[0]),
+                "fold": int(frame["fold"].iloc[0]),
+                "seed": int(frame["seed"].iloc[0]),
+            }
+            for key, observed in identity.items():
+                expected = metadata.get(key)
+                if str(expected) != str(observed):
+                    raise ValueError(
+                        f"{metadata_path} identity mismatch for {key}: "
+                        f"metadata={expected!r}, predictions={observed!r}"
+                    )
+            frame["decoder_mean_mmhg"] = mean_mmhg
+            frame["decoder_standard_deviation_mmhg"] = (
+                standard_deviation_mmhg
+            )
+        else:
+            frame["decoder_mean_mmhg"] = 0.0
+            frame["decoder_standard_deviation_mmhg"] = 1.0
+        frame["prediction_artifact"] = str(path.resolve())
+        frames.append(frame)
+    if not frames:
+        raise ValueError("At least one prediction artifact is required")
+    return pd.concat(frames, ignore_index=True)
 
 
 def validate_prediction_artifact(
@@ -85,10 +173,88 @@ def validate_prediction_artifact(
     allowed_conditions = ACTIVE_CONDITIONS | (additional_conditions or set())
     if not set(predictions["condition"]).issubset(allowed_conditions):
         raise ValueError("Prediction artifact contains a removed active condition")
-    if set(predictions["estimator_output_scale"]) != {"raw_mmhg"}:
+    fine_tuned = predictions["condition"].isin(NEURAL_CONDITIONS)
+    ridge = predictions.loc[~fine_tuned]
+    if not ridge.empty and set(ridge["estimator_output_scale"].astype(str)) != {
+        "raw_mmhg"
+    }:
         raise ValueError("Active Ridge predictions must declare raw_mmhg estimator output")
-    if set(predictions["decoder"]) != {"identity"}:
+    if not ridge.empty and set(ridge["decoder"].astype(str)) != {"identity"}:
         raise ValueError("Active Ridge predictions must declare identity decoding")
+    neural = predictions.loc[fine_tuned]
+    if not neural.empty:
+        if set(neural["estimator_output_scale"].astype(str)) != {
+            "full_development_pool_zscore"
+        }:
+            raise ValueError(
+                "Fine-tuned predictions must declare full-development-pool "
+                "z-score output"
+            )
+        if set(neural["decoder"].astype(str)) != {
+            "affine_full_development_pool_inverse_zscore"
+        }:
+            raise ValueError(
+                "Fine-tuned predictions must declare explicit full-development-pool "
+                "affine z-score decoding"
+            )
+        if not np.isfinite(
+            pd.to_numeric(neural["estimator_output"], errors="coerce")
+        ).all():
+            raise ValueError("Fine-tuned z-score estimator outputs must be finite")
+        decoder_columns = {
+            "decoder_mean_mmhg", "decoder_standard_deviation_mmhg"
+        }
+        observed_decoder_columns = decoder_columns.intersection(neural.columns)
+        if observed_decoder_columns and observed_decoder_columns != decoder_columns:
+            raise ValueError("Fine-tuned affine decoder metadata are incomplete")
+        if observed_decoder_columns:
+            decoder_parameters = neural[
+                ["decoder_mean_mmhg", "decoder_standard_deviation_mmhg"]
+            ].apply(pd.to_numeric, errors="coerce")
+            if not np.isfinite(decoder_parameters).all().all() or not (
+                decoder_parameters["decoder_standard_deviation_mmhg"] > 0
+            ).all():
+                raise ValueError("Fine-tuned affine decoder parameters must be finite")
+            run_identity = [
+                "dataset", "model", "condition", "target", "fold", "seed"
+            ]
+            if neural.groupby(run_identity, dropna=False)[
+                ["decoder_mean_mmhg", "decoder_standard_deviation_mmhg"]
+            ].nunique(dropna=False).gt(1).any().any():
+                raise ValueError("Fine-tuned decoder parameters changed within one run")
+            decoded = (
+                pd.to_numeric(
+                    neural["estimator_output"], errors="coerce"
+                ).to_numpy(float)
+                * decoder_parameters[
+                    "decoder_standard_deviation_mmhg"
+                ].to_numpy(float)
+                + decoder_parameters["decoder_mean_mmhg"].to_numpy(float)
+            )
+            if not np.allclose(
+                decoded,
+                neural["y_pred_mmhg"].to_numpy(float),
+                rtol=1e-6,
+                atol=1e-3,
+            ):
+                raise ValueError(
+                    "Fine-tuned mmHg predictions do not match the declared affine decoder"
+                )
+        if "y_pred_zscore" in neural and not np.allclose(
+            pd.to_numeric(neural["y_pred_zscore"], errors="coerce"),
+            pd.to_numeric(neural["estimator_output"], errors="coerce"),
+            rtol=1e-7,
+            atol=1e-7,
+        ):
+            raise ValueError("Fine-tuned estimator_output differs from y_pred_zscore")
+    if not ridge.empty:
+        if not np.allclose(
+            pd.to_numeric(ridge["estimator_output"], errors="coerce"),
+            ridge["y_pred_mmhg"].to_numpy(float),
+            rtol=1e-10,
+            atol=1e-10,
+        ):
+            raise ValueError("Ridge identity decoding changed the estimator output")
     if predictions["padding_policy"].astype(str).str.contains("reflect").any():
         raise ValueError("Reflection padding is not part of the corrected benchmark")
     padding = predictions["padding_required"].astype(str).str.lower().eq("true")
@@ -106,7 +272,6 @@ def validate_complete_benchmark_matrix(predictions: pd.DataFrame) -> None:
             "Corrected aggregation requires exactly "
             f"{sorted(EXPECTED_DATASETS)}; observed {sorted(datasets)}"
         )
-    row_keys = ["segment_id", "fold", "seed", "target"]
     for dataset, cohort in predictions.groupby("dataset", sort=True):
         methods = set(
             cohort[["model", "condition"]].drop_duplicates().itertuples(
@@ -122,13 +287,7 @@ def validate_complete_benchmark_matrix(predictions: pd.DataFrame) -> None:
             )
         if set(cohort["target"]) != {"sbp", "dbp"}:
             raise ValueError(f"{dataset} must contain separate SBP and DBP tasks")
-        uses_demographics = cohort["condition"].isin(
-            {
-                "demographics",
-                "ppg_features_demographics",
-                "frozen_demographics",
-            }
-        )
+        uses_demographics = cohort["condition"].isin(DEMOGRAPHIC_CONDITIONS)
         expected_demographics = EXPECTED_DEMOGRAPHIC_FIELDS[str(dataset)]
         if set(cohort.loc[uses_demographics, "demographic_fields"].astype(str)) != {
             expected_demographics
@@ -143,17 +302,64 @@ def validate_complete_benchmark_matrix(predictions: pd.DataFrame) -> None:
                 f"{dataset} non-demographic methods must declare demographic_fields=none"
             )
 
+        evaluation_keys = [
+            "subject_id",
+            "measurement_id",
+            "segment_id",
+            "fold",
+            "target",
+        ]
         reference = cohort[
             (cohort["model"] == "demographics")
             & (cohort["condition"] == "demographics")
-        ].sort_values(row_keys).reset_index(drop=True)
-        if reference.duplicated(row_keys).any():
+        ]
+        if reference.duplicated(evaluation_keys).any():
             raise ValueError(f"{dataset} demographics reference has duplicate rows")
+        if reference["seed"].nunique() != 1:
+            raise ValueError(
+                f"{dataset} deterministic Ridge methods must contain one seed"
+            )
+        reference = reference.sort_values(evaluation_keys).reset_index(drop=True)
         for (model, condition), method in cohort.groupby(
             ["model", "condition"], sort=True
         ):
-            method = method.sort_values(row_keys).reset_index(drop=True)
-            if not method[row_keys].equals(reference[row_keys]):
+            is_neural = condition in NEURAL_CONDITIONS
+            observed_seeds = set(method["seed"].astype(int))
+            if is_neural and observed_seeds != NEURAL_SEEDS:
+                raise ValueError(
+                    f"{dataset} {model}/{condition} must contain seeds 17, 23, and 42"
+                )
+            if not is_neural and len(observed_seeds) != 1:
+                raise ValueError(
+                    f"{dataset} {model}/{condition} is deterministic and must "
+                    "contain one seed"
+                )
+            per_seed_duplicates = method.duplicated([*evaluation_keys, "seed"])
+            if per_seed_duplicates.any():
+                raise ValueError(
+                    f"{dataset} {model}/{condition} contains duplicate evaluation rows"
+                )
+            expected_seed_count = len(NEURAL_SEEDS) if is_neural else 1
+            seed_counts = method.groupby(
+                evaluation_keys, dropna=False
+            )["seed"].nunique()
+            if not seed_counts.eq(expected_seed_count).all():
+                raise ValueError(
+                    f"{dataset} {model}/{condition} does not contain the expected "
+                    "seed set for every evaluation row"
+                )
+            if method.groupby(evaluation_keys, dropna=False)[
+                "y_true_mmhg"
+            ].nunique(dropna=False).gt(1).any():
+                raise ValueError(
+                    f"{dataset} {model}/{condition} changed target labels across seeds"
+                )
+            method = (
+                method.drop_duplicates(evaluation_keys)
+                .sort_values(evaluation_keys)
+                .reset_index(drop=True)
+            )
+            if not method[evaluation_keys].equals(reference[evaluation_keys]):
                 raise ValueError(
                     f"{dataset} {model}/{condition} does not use the identical "
                     "evaluation rows"
@@ -169,26 +375,99 @@ def validate_complete_benchmark_matrix(predictions: pd.DataFrame) -> None:
                 )
 
 
-def aggregate_prediction_units(
+UNIT_GROUP_COLUMNS = [
+    "dataset",
+    "source",
+    "subject_id",
+    "measurement_id",
+    "fold",
+    "model",
+    "condition",
+    "target",
+    "preprocessing_policy",
+    "padding_policy",
+    "padding_required",
+    "pretraining_overlap",
+    "source_fidelity",
+    "contract_version",
+    "demographic_fields",
+]
+METRIC_NAMES = (
+    "mae",
+    "rmse",
+    "bias",
+    "error_std",
+    "r2",
+    "pearson",
+    "calibration_slope",
+    "calibration_intercept",
+)
+
+
+def aggregate_seed_prediction_units(
     predictions: pd.DataFrame,
     additional_conditions: set[str] | None = None,
 ) -> pd.DataFrame:
-    """Average PPG-BP recordings and neural seeds before primary scoring."""
+    """Create scoring units while keeping every neural training seed separate."""
+
     validate_prediction_artifact(predictions, additional_conditions)
     data = predictions.copy()
     ppgbp = data["dataset"].eq("PPG-BP")
     data.loc[ppgbp, "measurement_id"] = data.loc[ppgbp, "subject_id"].astype(str)
-    unit_columns = [
-        "dataset", "source", "subject_id", "measurement_id", "fold", "model",
-        "condition", "target", "preprocessing_policy", "padding_policy",
-        "padding_required", "pretraining_overlap", "source_fidelity",
-        "contract_version", "demographic_fields",
-    ]
-    aggregated = data.groupby(unit_columns, as_index=False, dropna=False).agg(
+    aggregated = data.groupby(
+        [*UNIT_GROUP_COLUMNS, "seed"], as_index=False, dropna=False
+    ).agg(
         y_true_mmhg=("y_true_mmhg", "mean"),
         y_pred_mmhg=("y_pred_mmhg", "mean"),
         n_segments=("segment_id", "nunique"),
+    )
+    aggregated["n_seeds"] = 1
+    aggregated["aggregation_mode"] = np.where(
+        aggregated["condition"].isin(NEURAL_CONDITIONS),
+        "single_neural_seed",
+        "single_deterministic_fit",
+    )
+    return aggregated
+
+
+def aggregate_prediction_units(
+    predictions: pd.DataFrame,
+    additional_conditions: set[str] | None = None,
+) -> pd.DataFrame:
+    """Create diagnostic units, averaging neural predictions across seeds.
+
+    These units are intentionally used only for prediction-level diagnostic
+    figures. Primary neural metrics are the mean of metrics calculated for the
+    three independently trained seeds, not metrics of this seed ensemble.
+    """
+
+    seed_units = aggregate_seed_prediction_units(predictions, additional_conditions)
+    aggregated = seed_units.groupby(
+        UNIT_GROUP_COLUMNS, as_index=False, dropna=False
+    ).agg(
+        y_true_mmhg=("y_true_mmhg", "mean"),
+        y_pred_mmhg=("y_pred_mmhg", "mean"),
+        n_segments=("n_segments", "max"),
         n_seeds=("seed", "nunique"),
+    )
+    neural = aggregated["condition"].isin(NEURAL_CONDITIONS)
+    if not aggregated.loc[neural, "n_seeds"].eq(len(NEURAL_SEEDS)).all():
+        raise ValueError(
+            "Diagnostic neural predictions require all three training seeds"
+        )
+    active_ridge = aggregated["condition"].isin(ACTIVE_CONDITIONS - NEURAL_CONDITIONS)
+    if not aggregated.loc[active_ridge, "n_seeds"].eq(1).all():
+        raise ValueError("Deterministic Ridge predictions must contain one seed")
+    aggregated["aggregation_mode"] = np.select(
+        (
+            neural,
+            aggregated["n_seeds"].eq(1),
+        ),
+        (
+            "diagnostic_mean_prediction_across_3_training_seeds",
+            "single_deterministic_fit",
+        ),
+        default="diagnostic_mean_prediction_across_runs",
     )
     return aggregated
 
@@ -237,20 +516,10 @@ def _bootstrap_intervals(
     confidence: float,
     seed: int,
 ) -> dict[str, float]:
-    interval_metrics = (
-        "mae",
-        "rmse",
-        "bias",
-        "error_std",
-        "r2",
-        "pearson",
-        "calibration_slope",
-        "calibration_intercept",
-    )
     if replicates <= 0:
         return {
             f"{metric}_ci_{side}": np.nan
-            for metric in interval_metrics
+            for metric in METRIC_NAMES
             for side in ("low", "high")
         }
 
@@ -336,31 +605,254 @@ def _bootstrap_intervals(
     return result
 
 
+def _bootstrap_seed_mean_intervals(
+    data: pd.DataFrame,
+    replicates: int,
+    confidence: float,
+    seed: int,
+) -> dict[str, float]:
+    """Bootstrap participants within each seed, then average seed statistics.
+
+    The same participant resample is used for all seeds because their outer-test
+    rows are paired. Predictions are never averaged before calculating a seed's
+    statistic, so this cannot accidentally report an ensemble advantage.
+    """
+
+    if replicates <= 0:
+        return {
+            f"{metric}_ci_{side}": np.nan
+            for metric in METRIC_NAMES
+            for side in ("low", "high")
+        }
+    seed_groups = [
+        (int(training_seed), group.copy())
+        for training_seed, group in data.groupby("seed", sort=True)
+    ]
+    if not seed_groups:
+        raise ValueError("Cannot bootstrap an empty seed group")
+    subjects = sorted(seed_groups[0][1]["subject_id"].astype(str).unique())
+    expected_subjects = set(subjects)
+    evaluation_keys = [
+        column
+        for column in ("subject_id", "measurement_id", "fold")
+        if column in data.columns
+    ]
+    reference_rows = seed_groups[0][1].sort_values(evaluation_keys).reset_index(
+        drop=True
+    )
+    moments_by_seed: list[np.ndarray] = []
+    for training_seed, group in seed_groups:
+        if set(group["subject_id"].astype(str)) != expected_subjects:
+            raise ValueError(
+                f"Training seed {training_seed} does not contain identical subjects"
+            )
+        ordered = group.sort_values(evaluation_keys).reset_index(drop=True)
+        if not ordered[evaluation_keys].equals(reference_rows[evaluation_keys]):
+            raise ValueError(
+                f"Training seed {training_seed} does not contain identical "
+                "evaluation units"
+            )
+        if not np.allclose(
+            ordered["y_true_mmhg"].to_numpy(float),
+            reference_rows["y_true_mmhg"].to_numpy(float),
+            rtol=0,
+            atol=1e-10,
+        ):
+            raise ValueError(
+                f"Training seed {training_seed} changed evaluation targets"
+            )
+        subject_moments: dict[str, list[float]] = {}
+        for subject_id, subject in group.assign(
+            _bootstrap_subject=group["subject_id"].astype(str)
+        ).groupby("_bootstrap_subject", sort=True):
+            y_true = subject["y_true_mmhg"].to_numpy(float)
+            y_pred = subject["y_pred_mmhg"].to_numpy(float)
+            error = y_pred - y_true
+            subject_moments[str(subject_id)] = [
+                np.mean(np.abs(error)),
+                np.mean(error**2),
+                np.mean(error),
+                np.mean(y_true),
+                np.mean(y_true**2),
+                np.mean(y_pred),
+                np.mean(y_pred**2),
+                np.mean(y_true * y_pred),
+            ]
+        moments_by_seed.append(
+            np.asarray([subject_moments[subject] for subject in subjects], dtype=float)
+        )
+
+    moments = np.stack(moments_by_seed, axis=0)
+    n_subjects = len(subjects)
+    sampled_subjects = np.random.default_rng(seed).choice(
+        n_subjects,
+        size=(replicates, n_subjects),
+        replace=True,
+    )
+    # Shape: training seed x bootstrap replicate x moment.
+    sampled = moments[:, sampled_subjects, :].mean(axis=2)
+    (
+        mae,
+        mse,
+        bias,
+        true_mean,
+        true_second_moment,
+        predicted_mean,
+        predicted_second_moment,
+        true_predicted_moment,
+    ) = np.moveaxis(sampled, -1, 0)
+    true_variance = np.maximum(true_second_moment - true_mean**2, 0.0)
+    predicted_variance = np.maximum(
+        predicted_second_moment - predicted_mean**2, 0.0
+    )
+    covariance = true_predicted_moment - true_mean * predicted_mean
+    correlation_denominator = np.sqrt(true_variance * predicted_variance)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        slope = np.where(
+            predicted_variance > 0, covariance / predicted_variance, np.nan
+        )
+        per_seed_samples = {
+            "mae": mae,
+            "rmse": np.sqrt(np.maximum(mse, 0.0)),
+            "bias": bias,
+            "error_std": np.sqrt(np.maximum(mse - bias**2, 0.0)),
+            "r2": np.where(true_variance > 0, 1 - mse / true_variance, np.nan),
+            "pearson": np.where(
+                correlation_denominator > 0,
+                covariance / correlation_denominator,
+                np.nan,
+            ),
+            "calibration_slope": slope,
+            "calibration_intercept": true_mean - slope * predicted_mean,
+        }
+
+    alpha = (1 - confidence) / 2
+    result: dict[str, float] = {}
+    for metric, values in per_seed_samples.items():
+        # Axis zero is the independently trained seed. This is a mean of
+        # seed-specific metrics, not a metric calculated from mean predictions.
+        combined = np.mean(values, axis=0)
+        finite = combined[np.isfinite(combined)]
+        if finite.size:
+            low, high = np.quantile(finite, [alpha, 1 - alpha])
+            result[f"{metric}_ci_low"] = float(low)
+            result[f"{metric}_ci_high"] = float(high)
+        else:
+            result[f"{metric}_ci_low"] = np.nan
+            result[f"{metric}_ci_high"] = np.nan
+    return result
+
+
 def summarize_benchmark(
     predictions: pd.DataFrame,
     bootstrap_replicates: int = 2000,
     bootstrap_confidence: float = 0.95,
     seed: int = 20260715,
     additional_conditions: set[str] | None = None,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+    return_seed_details: bool = False,
+) -> (
+    tuple[pd.DataFrame, pd.DataFrame]
+    | tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]
+):
+    """Summarize deterministic fits and independent neural training seeds.
+
+    The first returned table contains averaged-seed predictions for diagnostics
+    only. Neural point estimates and confidence intervals in ``metrics`` are
+    calculated seed by seed and then averaged. With ``return_seed_details``, the
+    seed-specific scoring units and metrics are returned as the third and fourth
+    values for audit and reporting of training-seed variability.
+    """
+
+    seed_units = aggregate_seed_prediction_units(predictions, additional_conditions)
     units = aggregate_prediction_units(predictions, additional_conditions)
-    records = []
+    seed_records = []
     grouping = [
         "dataset", "model", "condition", "target", "preprocessing_policy",
         "padding_policy", "padding_required", "pretraining_overlap",
         "source_fidelity", "contract_version", "demographic_fields",
     ]
-    for index, (keys, group) in enumerate(units.groupby(grouping, dropna=False)):
-        records.append(
+    for index, (keys, group) in enumerate(
+        seed_units.groupby([*grouping, "seed"], dropna=False)
+    ):
+        condition = str(keys[grouping.index("condition")])
+        seed_records.append(
             {
-                **dict(zip(grouping, keys)),
+                **dict(zip([*grouping, "seed"], keys)),
                 **participant_balanced_metrics(group),
                 **_bootstrap_intervals(
                     group, bootstrap_replicates, bootstrap_confidence, seed + index
                 ),
+                "n_seeds": 1,
+                "aggregation_mode": (
+                    "single_neural_seed"
+                    if condition in NEURAL_CONDITIONS
+                    else "single_deterministic_fit"
+                ),
+                "bootstrap_mode": "participant_resample_within_seed",
             }
         )
-    return units, pd.DataFrame(records).sort_values(grouping).reset_index(drop=True)
+    seed_metrics = pd.DataFrame(seed_records).sort_values(
+        [*grouping, "seed"]
+    ).reset_index(drop=True)
+
+    records = []
+    for index, (keys, group) in enumerate(seed_units.groupby(grouping, dropna=False)):
+        condition = str(keys[grouping.index("condition")])
+        matching = seed_metrics
+        for column, value in zip(grouping, keys):
+            matching = matching[
+                matching[column].eq(value)
+                if not pd.isna(value)
+                else matching[column].isna()
+            ]
+        n_seeds = int(matching["seed"].nunique())
+        expected_n_seeds = len(NEURAL_SEEDS) if condition in NEURAL_CONDITIONS else 1
+        if n_seeds != expected_n_seeds:
+            raise ValueError(
+                f"{condition} requires {expected_n_seeds} seed-specific metric rows; "
+                f"observed {n_seeds}"
+            )
+        n_subjects = matching["n_subjects"].to_numpy(float)
+        n_measurements = matching["n_measurements"].to_numpy(float)
+        if not np.allclose(n_subjects, n_subjects[0]) or not np.allclose(
+            n_measurements, n_measurements[0]
+        ):
+            raise ValueError("Training seeds do not use identical evaluation units")
+        record: dict[str, object] = {
+            **dict(zip(grouping, keys)),
+            "n_subjects": float(n_subjects[0]),
+            "n_measurements": float(n_measurements[0]),
+            "n_seeds": n_seeds,
+            "aggregation_mode": (
+                "mean_of_3_seed_specific_metrics"
+                if condition in NEURAL_CONDITIONS
+                else "single_deterministic_fit"
+            ),
+            "bootstrap_mode": (
+                "participant_resample_within_seed_then_mean_seed_metrics"
+                if condition in NEURAL_CONDITIONS
+                else "participant_resample_within_seed"
+            ),
+        }
+        for metric in METRIC_NAMES:
+            values = matching[metric].to_numpy(float)
+            record[metric] = float(np.mean(values))
+            record[f"{metric}_seed_sd"] = (
+                float(np.std(values, ddof=1)) if len(values) > 1 else 0.0
+            )
+        record.update(
+            _bootstrap_seed_mean_intervals(
+                group,
+                bootstrap_replicates,
+                bootstrap_confidence,
+                seed + 100_000 + index,
+            )
+        )
+        records.append(record)
+    metrics = pd.DataFrame(records).sort_values(grouping).reset_index(drop=True)
+    if return_seed_details:
+        return units, metrics, seed_units, seed_metrics
+    return units, metrics
 
 
 def incremental_effects(metrics: pd.DataFrame) -> pd.DataFrame:
@@ -382,11 +874,15 @@ def incremental_effects(metrics: pd.DataFrame) -> pd.DataFrame:
         comparisons = []
         if condition == "frozen_demographics":
             comparisons.append(("demographics_added_to_frozen", "frozen"))
+        elif condition == "finetuned_demographics":
+            comparisons.append(
+                ("demographics_added_to_finetuned", "finetuned")
+            )
         elif condition == "ppg_features_demographics":
             comparisons.append(("demographics_added_to_ppg_features", "ppg_features"))
         for effect, reference_condition in comparisons:
             reference_demographics = "none" if reference_condition in {
-                "frozen", "ppg_features"
+                "frozen", "finetuned", "ppg_features"
             } else demographic_fields
             key = (
                 dataset,
@@ -441,6 +937,10 @@ def method_display_label(
         return f"Frozen {display}"
     if condition == "frozen_demographics":
         return f"Frozen {display} + Demo{demographic_marker}"
+    if condition == "finetuned":
+        return f"Fine-tuned {display}"
+    if condition == "finetuned_demographics":
+        return f"Fine-tuned {display} + Demo{demographic_marker}"
     raise ValueError(f"Unsupported active condition: {condition}")
 
 
@@ -451,14 +951,9 @@ def heatmap_method_display_label(model: str, condition: str) -> str:
 
 
 def _has_age_sex_only_demographics(data: pd.DataFrame) -> bool:
-    demographic_conditions = {
-        "demographics",
-        "ppg_features_demographics",
-        "frozen_demographics",
-    }
     return bool(
         (
-            data["condition"].isin(demographic_conditions)
+            data["condition"].isin(DEMOGRAPHIC_CONDITIONS)
             & data["demographic_fields"].astype(str).eq("age/sex")
         ).any()
     )
@@ -504,6 +999,68 @@ def _metric_error(row: pd.Series) -> np.ndarray:
     )
 
 
+def _metric_annotation(row: pd.Series) -> str:
+    text = f"{float(row['mae']):.2f}"
+    if str(row["condition"]) in NEURAL_CONDITIONS:
+        text += f"\n±{float(row['mae_seed_sd']):.2f}"
+    return text
+
+
+def _add_neural_metric_figure_note(
+    figure: object,
+    *,
+    diagnostic_predictions: bool,
+    y: float = 0.035,
+) -> None:
+    suffix = (
+        " Prediction-level neural panels show the mean prediction across seeds "
+        "for visualization only."
+        if diagnostic_predictions
+        else ""
+    )
+    figure.text(
+        0.01,
+        y,
+        "Fine-tuned MAE is the mean of seed-specific scores for seeds 17, 23, "
+        f"and 42; ± denotes training-seed SD.{suffix}",
+        fontsize=8.5,
+        ha="left",
+    )
+
+
+def _validate_visualization_aggregation(
+    units: pd.DataFrame,
+    metrics: pd.DataFrame,
+) -> None:
+    required = {"aggregation_mode", "n_seeds"}
+    for label, frame in (("diagnostic predictions", units), ("metrics", metrics)):
+        missing = sorted(required.difference(frame.columns))
+        if missing:
+            raise ValueError(
+                f"{label} lack explicit aggregation metadata: {missing}"
+            )
+    neural_metrics = metrics[metrics["condition"].isin(NEURAL_CONDITIONS)]
+    if not neural_metrics.empty and (
+        set(neural_metrics["aggregation_mode"].astype(str))
+        != {"mean_of_3_seed_specific_metrics"}
+        or not neural_metrics["n_seeds"].eq(3).all()
+    ):
+        raise ValueError(
+            "Fine-tuned visualizations require mean seed-specific metrics from "
+            "three training seeds"
+        )
+    neural_units = units[units["condition"].isin(NEURAL_CONDITIONS)]
+    if not neural_units.empty and (
+        set(neural_units["aggregation_mode"].astype(str))
+        != {"diagnostic_mean_prediction_across_3_training_seeds"}
+        or not neural_units["n_seeds"].eq(3).all()
+    ):
+        raise ValueError(
+            "Fine-tuned diagnostic plots require explicitly labeled mean-seed "
+            "predictions"
+        )
+
+
 def _paired_mae_plot(
     summary: pd.DataFrame,
     dataset: str,
@@ -512,7 +1069,9 @@ def _paired_mae_plot(
     import matplotlib.pyplot as plt
     from matplotlib.patches import Patch
 
-    figure, axis = plt.subplots(figsize=(14, 7.5))
+    figure, axis = plt.subplots(
+        figsize=(max(14, 1.8 * (len(PAIRED_CONFIGURATIONS) + 1)), 7.5)
+    )
     centers = np.arange(len(PAIRED_CONFIGURATIONS) + 1, dtype=float)
     width = 0.18
     demo_marker = "†" if _has_age_sex_only_demographics(summary) else ""
@@ -539,10 +1098,10 @@ def _paired_mae_plot(
         axis.text(
             position,
             float(demo_only["mae_ci_high"]) + 0.22,
-            f"{demo_only['mae']:.2f}",
+            _metric_annotation(demo_only),
             ha="center",
             va="bottom",
-            fontsize=7.5,
+            fontsize=6.5,
         )
 
     for index, (model, without_demo, with_demo, _) in enumerate(
@@ -571,21 +1130,17 @@ def _paired_mae_plot(
                 axis.text(
                     position,
                     float(row["mae_ci_high"]) + 0.22,
-                    f"{row['mae']:.2f}",
+                    _metric_annotation(row),
                     ha="center",
                     va="bottom",
-                    fontsize=7.5,
+                    fontsize=6.5,
                 )
 
     axis.set_xticks(
         centers,
         (
             "Demographics\nonly",
-            "PPG\nfeatures",
-            "Frozen\nPaPaGei-P",
-            "Frozen\nPaPaGei-S",
-            "Frozen\nPulse-PPG",
-            "Frozen\nAnyPPG",
+            *(label.replace(" ", "\n", 1) for *_, label in PAIRED_CONFIGURATIONS),
         ),
     )
     axis.set_ylabel("MAE (mmHg)")
@@ -636,9 +1191,12 @@ def _paired_mae_plot(
         frameon=False,
         ncols=2,
     )
-    bottom = 0.05 if _has_age_sex_only_demographics(summary) else 0
-    if bottom:
+    bottom = 0.08
+    if _has_age_sex_only_demographics(summary):
         _add_demographic_figure_note(figure)
+    _add_neural_metric_figure_note(
+        figure, diagnostic_predictions=False, y=0.035
+    )
     figure.tight_layout(rect=(0, bottom, 1, 0.81))
     path = output_root / f"bars_{_slug(dataset)}.png"
     figure.savefig(path, dpi=180)
@@ -769,6 +1327,7 @@ def generate_visualizations(
 
     output_root = Path(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
+    _validate_visualization_aggregation(units, metrics)
     paths: list[Path] = []
     labels = metrics.apply(
         lambda row: method_display_label(
@@ -880,11 +1439,12 @@ def generate_visualizations(
             figure.suptitle(
                 f"{dataset} {target.upper()} · paired {kind.replace('_', ' ')}"
             )
-            rectangle = (
+            if _has_age_sex_only_demographics(group):
                 _add_demographic_figure_note(figure)
-                if _has_age_sex_only_demographics(group)
-                else (0, 0, 1, 0.96)
+            _add_neural_metric_figure_note(
+                figure, diagnostic_predictions=True, y=0.035
             )
+            rectangle = (0, 0.08, 1, 0.96)
             figure.tight_layout(rect=rectangle)
             path = output_root / f"{kind}_{_slug(dataset)}_{target}.png"
             figure.savefig(path, dpi=180)
@@ -922,11 +1482,7 @@ def generate_visualizations(
     age_sex_only_cells = {
         (row.label, row.dataset, row.target): (
             row.condition
-            in {
-                "demographics",
-                "ppg_features_demographics",
-                "frozen_demographics",
-            }
+            in DEMOGRAPHIC_CONDITIONS
             and str(row.demographic_fields) == "age/sex"
         )
         for row in heatmap_data.itertuples()
@@ -958,7 +1514,10 @@ def generate_visualizations(
     figure.colorbar(image, ax=axis, label="MAE (mmHg)")
     axis.set_title("MAE comparison across cohorts and targets")
     _add_demographic_figure_note(figure)
-    figure.tight_layout(rect=(0, 0.05, 1, 0.96))
+    _add_neural_metric_figure_note(
+        figure, diagnostic_predictions=False, y=0.035
+    )
+    figure.tight_layout(rect=(0, 0.08, 1, 0.96))
     path = output_root / "mae_heatmap.png"
     figure.savefig(path, dpi=180)
     plt.close(figure)
@@ -1016,7 +1575,10 @@ def generate_visualizations(
     figure.colorbar(image, ax=axis, label="MAE rank (1 = best)")
     axis.set_title("Within-cohort MAE rank")
     _add_demographic_figure_note(figure)
-    figure.tight_layout(rect=(0, 0.05, 1, 0.96))
+    _add_neural_metric_figure_note(
+        figure, diagnostic_predictions=False, y=0.035
+    )
+    figure.tight_layout(rect=(0, 0.08, 1, 0.96))
     path = output_root / "mae_rank_heatmap.png"
     figure.savefig(path, dpi=180)
     plt.close(figure)
@@ -1024,13 +1586,15 @@ def generate_visualizations(
 
     effects = incremental_effects(metrics)
     effect_labels = {
-        "handcrafted_ppg": "PPG features",
-        "papagei_p": "Frozen PaPaGei-P",
-        "papagei_s": "Frozen PaPaGei-S",
-        "pulseppg": "Frozen Pulse-PPG",
-        "anyppg": "Frozen AnyPPG",
+        (model, with_demo): label
+        for model, _, with_demo, label in PAIRED_CONFIGURATIONS
     }
-    effects["label"] = effects["model"].map(effect_labels)
+    effects["label"] = [
+        effect_labels.get((str(row.model), str(row.candidate_condition)))
+        for row in effects.itertuples()
+    ]
+    if effects["label"].isna().any():
+        raise ValueError("Demographic effects contain an unregistered comparison")
     delta_heatmap = effects.pivot_table(
         index="label",
         columns=["dataset", "target"],
@@ -1082,7 +1646,10 @@ def generate_visualizations(
         "Effect of demographics on MAE · negative values indicate improvement"
     )
     _add_demographic_figure_note(figure)
-    figure.tight_layout(rect=(0, 0.05, 1, 0.96))
+    _add_neural_metric_figure_note(
+        figure, diagnostic_predictions=False, y=0.035
+    )
+    figure.tight_layout(rect=(0, 0.08, 1, 0.96))
     path = output_root / "demographic_mae_delta_heatmap.png"
     figure.savefig(path, dpi=180)
     plt.close(figure)

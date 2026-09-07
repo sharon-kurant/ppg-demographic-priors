@@ -17,6 +17,7 @@ def test_paper_outputs_are_built_from_complete_aggregate_tables(tmp_path: Path):
     contrasts = []
     constants = []
     complementarity = []
+    fine_tuning_contrasts = []
     spread = []
     for dataset in DATASET_ORDER:
         demographic_fields = "age/sex" if dataset == "PulseDB-MIMIC" else "age/sex/BMI"
@@ -86,6 +87,22 @@ def test_paper_outputs_are_built_from_complete_aggregate_tables(tmp_path: Path):
                         "waveform_lift_beyond_demographics_mmhg": 0.2 if index < 3 else -0.1,
                     }
                 )
+                if model != "handcrafted_ppg":
+                    for contrast in (
+                        "finetuned_vs_frozen_without_demographics",
+                        "finetuned_vs_frozen_with_demographics",
+                    ):
+                        fine_tuning_contrasts.append(
+                            {
+                                "dataset": dataset,
+                                "target": target,
+                                "model": model,
+                                "contrast": contrast,
+                                "delta_mae_candidate_minus_reference": -0.25,
+                                "ci_low": -0.5,
+                                "ci_high": 0.1,
+                            }
+                        )
 
     paths = {}
     for name, frame in {
@@ -93,6 +110,7 @@ def test_paper_outputs_are_built_from_complete_aggregate_tables(tmp_path: Path):
         "contrasts": pd.DataFrame(contrasts),
         "constants": pd.DataFrame(constants),
         "complementarity": pd.DataFrame(complementarity),
+        "fine_tuning_contrasts": pd.DataFrame(fine_tuning_contrasts),
         "spread": pd.DataFrame(spread),
     }.items():
         path = tmp_path / f"{name}.csv"
@@ -104,6 +122,7 @@ def test_paper_outputs_are_built_from_complete_aggregate_tables(tmp_path: Path):
         paired_contrasts_csv=paths["contrasts"],
         constants_csv=paths["constants"],
         complementarity_csv=paths["complementarity"],
+        fine_tuning_contrasts_csv=paths["fine_tuning_contrasts"],
         prediction_spread_csv=paths["spread"],
         output_root=tmp_path / "paper",
     )
@@ -113,3 +132,4 @@ def test_paper_outputs_are_built_from_complete_aggregate_tables(tmp_path: Path):
     assert len(table) == 8
     assert set(table["demographics_improves_waveform_count"]) == {4}
     assert set(table["waveform_improves_demographics_count"]) == {3}
+    assert outputs["fine_tuning_figure"].is_file()

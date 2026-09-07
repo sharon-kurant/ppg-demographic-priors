@@ -21,9 +21,12 @@ from ppg_bp_incremental.models.encoders.base import EncoderFingerprint
 
 
 EXPECTED_NATIVE_SHAPES = {
-    "papagei_p": {"projected_embedding": (2, 512), "pooled_embedding": (2, 512)},
+    "papagei_p": {
+        "downstream_dense_embedding": (2, 512),
+        "pooled_embedding": (2, 512),
+    },
     "papagei_s": {
-        "projected_embedding": (2, 512),
+        "downstream_dense_embedding": (2, 512),
         "ipa": (2, 1),
         "sqi": (2, 1),
         "pooled_embedding": (2, 512),

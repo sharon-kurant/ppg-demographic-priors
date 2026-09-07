@@ -1,4 +1,4 @@
-contract_version: source-faithful-v2
+contract_version: source-faithful-v3
 models:
   papagei:
     repository: https://github.com/Nokia-Bell-Labs/papagei-foundation-model.git

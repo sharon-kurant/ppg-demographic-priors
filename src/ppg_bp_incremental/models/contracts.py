@@ -19,7 +19,7 @@ from typing import Any, Literal, Mapping
 import numpy as np
 
 
-CONTRACT_VERSION = "source-faithful-v2"
+CONTRACT_VERSION = "source-faithful-v3"
 FidelityStatus = Literal[
     "released_exact",
     "paper_specified",
@@ -142,6 +142,7 @@ MODEL_CONTRACTS: dict[str, ModelContract] = {
         input_duration_seconds=10.0,
         input_shape="(B, 1, 1250)",
         preprocessing_operations=(
+            "for PPG-BP only, discard the final raw sample as in the released notebook",
             "per-record z-normalization (epsilon 1e-7)",
             "0.5-12 Hz fourth-order Chebyshev-II band-pass, 20 dB attenuation",
             "50 ms zero-phase moving-average smoothing when source rate is at least 75 Hz",
@@ -150,13 +151,15 @@ MODEL_CONTRACTS: dict[str, ModelContract] = {
         ),
         native_outputs=(
             NativeComponentContract(
-                "projected_embedding", "(B, 512)", "downstream projected representation"
+                "downstream_dense_embedding",
+                "(B, 512)",
+                "dense-transformed downstream representation",
             ),
             NativeComponentContract(
                 "pooled_embedding", "(B, 512)", "pooled backbone representation"
             ),
         ),
-        selected_representation="projected_embedding",
+        selected_representation="downstream_dense_embedding",
         selected_dimension=512,
         bp_estimator="feature standardization followed by separate Ridge estimators",
         bp_target_scale="raw_mmhg",
@@ -175,6 +178,7 @@ MODEL_CONTRACTS: dict[str, ModelContract] = {
         input_duration_seconds=10.0,
         input_shape="(B, 1, 1250)",
         preprocessing_operations=(
+            "for PPG-BP only, discard the final raw sample as in the released notebook",
             "per-record z-normalization (epsilon 1e-7)",
             "0.5-12 Hz fourth-order Chebyshev-II band-pass, 20 dB attenuation",
             "50 ms zero-phase moving-average smoothing when source rate is at least 75 Hz",
@@ -183,7 +187,9 @@ MODEL_CONTRACTS: dict[str, ModelContract] = {
         ),
         native_outputs=(
             NativeComponentContract(
-                "projected_embedding", "(B, 512)", "downstream projected representation"
+                "downstream_dense_embedding",
+                "(B, 512)",
+                "dense-transformed downstream representation",
             ),
             NativeComponentContract("ipa", "(B, 1)", "inflection-point-area prediction"),
             NativeComponentContract("sqi", "(B, 1)", "signal-quality-index prediction"),
@@ -191,7 +197,7 @@ MODEL_CONTRACTS: dict[str, ModelContract] = {
                 "pooled_embedding", "(B, 512)", "pooled backbone representation"
             ),
         ),
-        selected_representation="projected_embedding",
+        selected_representation="downstream_dense_embedding",
         selected_dimension=512,
         bp_estimator="feature standardization followed by separate Ridge estimators",
         bp_target_scale="raw_mmhg",
@@ -213,7 +219,7 @@ MODEL_CONTRACTS: dict[str, ModelContract] = {
             "for PPG-BP only, discard the final raw sample as in released PPGBP.py",
             "per-record z-normalization (epsilon 1e-7)",
             "0.5-12 Hz fourth-order Chebyshev-II band-pass, 20 dB attenuation",
-            "50 ms zero-phase moving-average smoothing",
+            "50 ms zero-phase moving-average smoothing when source rate is at least 75 Hz",
             "polyphase resampling to 50 Hz",
             "symmetric zero-padding only when the source recording is shorter than 10 s",
         ),
@@ -243,8 +249,10 @@ MODEL_CONTRACTS: dict[str, ModelContract] = {
         preprocessing_operations=(
             "0.5-8 Hz third-order Butterworth IIR using MNE zero-phase semantics",
             "polyphase resampling to 125 Hz",
-            "time-axis z-normalization (epsilon 1e-5)",
+            "one checkpoint-facing time-axis z-normalization (epsilon 1e-5); "
+            "the released pretraining constructor and loader together normalize twice",
             "symmetric zero-padding only for the short PPG-BP adaptation",
+            "exact downstream BP-array construction is not publicly released",
         ),
         native_outputs=(
             NativeComponentContract(
@@ -268,9 +276,11 @@ def source_fidelity(model: str, dataset: str) -> FidelityStatus:
     if model in {"papagei_p", "papagei_s", "pulseppg"} and dataset == "PPG-BP":
         return "released_exact"
     if model == "anyppg" and dataset.startswith("PulseDB"):
-        # Input preprocessing is paper/code specified, but BP use is an overlap
-        # evaluation through the released linear-probe pattern.
-        return "paper_specified"
+        # PulseDB overlaps pretraining, but the exact downstream BP-array
+        # construction is unavailable and the executable pretraining path
+        # contains two normalization stages.  The benchmark's single
+        # checkpoint-facing normalization therefore remains an adaptation.
+        return "source_consistent_adaptation"
     return "source_consistent_adaptation"
 
 

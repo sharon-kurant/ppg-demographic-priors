@@ -1,15 +1,24 @@
-contract_version: source-faithful-v2
+contract_version: source-faithful-v3
 models: [papagei_p, papagei_s, pulseppg, anyppg]
 datasets: [ppgbp, pulsedb_vital, pulsedb_mimic, butppg]
 targets: [sbp, dbp]
-foundation_conditions: [frozen, frozen_demographics]
-ridge_baselines: [demographics, ppg_features, ppg_features_demographics]
+foundation_conditions:
+  - frozen
+  - frozen_demographics
+  - finetuned
+  - finetuned_demographics
+ridge_baselines:
+  - demographics
+  - ppg_features
+  - ppg_features_demographics
+
 outer_folds: 5
 inner_group_folds: 3
 ridge_alphas: [0.1, 1.0, 10.0, 100.0, 1000.0]
 ridge_fit_weighting: equal_participant_then_equal_measurement_then_equal_source_row
 ridge_inner_selection: pooled_participant_macro_oof_mae_after_measurement_aggregation
 embedding_inference_batch_size: 256
+
 pulsedb_subjects_per_cohort: 300
 maximum_pulsedb_segments_per_subject: 10
 pulsedb_selection_seed: 42
@@ -18,8 +27,34 @@ maximum_butppg_segments_per_subject: 20
 butppg_selection_seed: 42
 primary_padding: zero
 padding_scope: ppgbp_only
-target_scale: raw_mmHg
-target_transform: none
+
+final_target_scale: raw_mmHg
+ridge_target_transform: none
+neural_target_transform: training_pool_zscore
+neural_decoder: affine_inverse_zscore_to_raw_mmHg
+neural:
+  head: [512, 128, 1]
+  activation: GELU
+  loss: participant_balanced_MSE
+  optimizer: Adam
+  batch_size: 64
+  maximum_epochs: 10
+  early_stopping_patience: 3
+  gradient_clip_norm: 1.0
+  mixed_precision: false
+  head_learning_rate_multiplier: 10.0
+  encoder_learning_rates:
+    papagei_p: 0.00003
+    papagei_s: 0.00003
+    pulseppg: 0.00001
+    anyppg: 0.00003
+  training_seeds: [17, 23, 42]
+  hyperparameter_selection_seed: 17
+  pulseppg_stabilization:
+    fixed_epoch_zero_training_embedding_standardization: true
+    zero_initialize_scalar_output_layer: true
+    freeze_batchnorm_running_stats: false
+
 demographics_by_dataset:
   ppgbp: [age, sex, bmi]
   pulsedb_vital: [age, sex, bmi]

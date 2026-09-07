@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Reproduce the complete source-faithful-v2 benchmark from extracted datasets.
+# Reproduce the source-faithful-v3 frozen/Ridge stage from extracted datasets.
 # Participant data, foundation-model source trees, and checkpoints remain external
 # to the repository; this script records all derived artifacts beneath dedicated
 # data and artifact roots.
@@ -17,8 +17,9 @@ Usage:
     --butppg-root PATH [OPTIONS]
 
 Required dataset roots must point to extracted source releases. The script
-reproduces all four cohorts, four frozen foundation models, two foundation-model
-conditions, three baselines, and both SBP and DBP targets.
+reproduces all four cohorts, four frozen foundation models, two frozen
+conditions, three baselines, and both SBP and DBP targets. Run
+`scripts/reproduce_finetuning.sh` afterward for the two neural conditions.
 
 Options:
   --ppgbp-root PATH             Extracted PPG-BP dataset root.
@@ -28,9 +29,9 @@ Options:
   --ppgbp-archive PATH          Optional original PPG-BP archive for provenance.
   --butppg-archive PATH         Optional original BUT PPG archive for provenance.
   --data-root PATH              Derived manifests/caches root
-                                (default: data/reproduction/source-faithful-v2).
+                                (default: data/reproduction/source-faithful-v3).
   --artifact-root PATH          Embeddings/results root
-                                (default: artifacts/reproduction/source-faithful-v2).
+                                (default: artifacts/reproduction/source-faithful-v3).
   --device DEVICE               Encoder device: auto, cpu, cuda, or cuda:N
                                 (default: auto).
   --setup-models                Download and verify the pinned public models first.
@@ -81,8 +82,8 @@ PULSEDB_MIMIC_ROOT=
 BUTPPG_ROOT=
 PPGBP_ARCHIVE=
 BUTPPG_ARCHIVE=
-DATA_ROOT="$REPO_ROOT/data/reproduction/source-faithful-v2"
-ARTIFACT_ROOT="$REPO_ROOT/artifacts/reproduction/source-faithful-v2"
+DATA_ROOT="$REPO_ROOT/data/reproduction/source-faithful-v3"
+ARTIFACT_ROOT="$REPO_ROOT/artifacts/reproduction/source-faithful-v3"
 DEVICE=auto
 SETUP_MODELS=0
 RESUME=0
@@ -209,7 +210,7 @@ import yaml
 path = Path(sys.argv[1])
 protocol = yaml.safe_load(path.read_text(encoding="utf-8"))
 expected = {
-    "contract_version": "source-faithful-v2",
+    "contract_version": "source-faithful-v3",
     "models": ["papagei_p", "papagei_s", "pulseppg", "anyppg"],
     "datasets": ["ppgbp", "pulsedb_vital", "pulsedb_mimic", "butppg"],
     "targets": ["sbp", "dbp"],
@@ -224,8 +225,8 @@ expected = {
     "butppg_selection_seed": 42,
     "primary_padding": "zero",
     "padding_scope": "ppgbp_only",
-    "target_scale": "raw_mmHg",
-    "target_transform": "none",
+    "final_target_scale": "raw_mmHg",
+    "ridge_target_transform": "none",
 }
 differences = {
     key: {"expected": value, "observed": protocol.get(key)}
@@ -279,7 +280,7 @@ mkdir -p \
 LOG_PATH="$ARTIFACT_ROOT/reproduce_benchmark.log"
 exec > >(tee -a "$LOG_PATH") 2>&1
 
-printf 'Starting complete benchmark reproduction at %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+printf 'Starting frozen/Ridge benchmark reproduction at %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf 'Data root: %s\nArtifact root: %s\nDevice: %s\n' \
   "$DATA_ROOT" "$ARTIFACT_ROOT" "$DEVICE"
 
@@ -548,9 +549,10 @@ done
   --constants "$INFLUENCE_ROOT/demographics_vs_outer_constant.csv" \
   --complementarity "$INFLUENCE_ROOT/complementarity.csv" \
   --aggregated-predictions "$BENCHMARK_ROOT/aggregated_predictions.csv" \
+  --without-fine-tuning \
   --output-root "$PAPER_OUTPUT_ROOT"
 
-printf 'Benchmark reproduction completed at %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+printf 'Frozen/Ridge stage completed at %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf 'Metrics: %s\nFigures: %s\nDemographic analysis: %s\nPaper outputs: %s\nLog: %s\n' \
   "$BENCHMARK_ROOT/metrics.csv" "$FIGURE_ROOT" "$INFLUENCE_ROOT" \
   "$PAPER_OUTPUT_ROOT" "$LOG_PATH"

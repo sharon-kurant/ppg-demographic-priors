@@ -1,7 +1,7 @@
-# Core versions recorded by the final manuscript-refresh runs. System libraries
-# are supplied by the execution platform, so this is a runtime record rather
-# than a byte-for-byte cross-platform solver lock.
-name: ppg-demographic-priors-paper
+# Core versions recorded for aggregation, visualization, and manuscript-output
+# generation. The neural runs used environment.finetuning.yml. System libraries
+# are platform supplied, so this is a runtime record rather than a solver lock.
+name: ppg-demographic-priors-analysis
 channels:
   - conda-forge
 dependencies:

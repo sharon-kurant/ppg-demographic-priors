@@ -21,6 +21,7 @@ EXPECTED_PUBLIC_COMMANDS = {
     "audit-models",
     "extract",
     "run-ridge",
+    "run-finetune",
     "aggregate",
     "plot",
     "data-eda",
@@ -84,6 +85,27 @@ def test_release_cli_exposes_exact_public_command_set() -> None:
             ],
         ),
         (
+            "run-finetune",
+            [
+                "--input-csv",
+                "manifest.csv",
+                "--splits",
+                "splits.csv",
+                "--model",
+                "pulseppg",
+                "--condition",
+                "finetuned_demographics",
+                "--target",
+                "sbp",
+                "--fold",
+                "0",
+                "--seed",
+                "17",
+                "--output-root",
+                "finetuning",
+            ],
+        ),
+        (
             "aggregate",
             ["--predictions", "predictions.csv", "--output-root", "aggregate"],
         ),
@@ -114,8 +136,35 @@ def test_release_defaults_match_the_reported_run() -> None:
     aggregate = parser.parse_args(
         ["aggregate", "--predictions", "predictions.csv", "--output-root", "out"]
     )
+    finetune = parser.parse_args(
+        [
+            "run-finetune",
+            "--input-csv",
+            "manifest.csv",
+            "--splits",
+            "splits.csv",
+            "--model",
+            "pulseppg",
+            "--condition",
+            "finetuned",
+            "--target",
+            "dbp",
+            "--fold",
+            "0",
+            "--seed",
+            "17",
+            "--output-root",
+            "finetuning",
+        ]
+    )
     assert extract.batch_size == 256
     assert aggregate.bootstrap_replicates == 10_000
+    assert finetune.batch_size == 64
+    assert finetune.max_epochs == 10
+    assert finetune.patience == 3
+    assert finetune.gradient_clip_norm == 1.0
+    assert finetune.standardize_embedding is None
+    assert finetune.zero_initialize_output_layer is None
 
 
 def test_release_cli_rejects_embedding_model_mismatch() -> None:

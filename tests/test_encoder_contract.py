@@ -115,6 +115,43 @@ def test_encoder_checks_shapes_and_embedding_cache_round_trip(tmp_path):
         )
 
 
+def test_embedding_loader_rejects_stale_source_faithful_contract_by_default(
+    tmp_path,
+):
+    encoder = DummyEncoder()
+    stale = replace(
+        encoder.fingerprint(),
+        contract_version="source-faithful-v2",
+    )
+    index = pd.DataFrame(
+        {
+            "subject_id": ["s1"],
+            "segment_id": ["a"],
+            "waveform_sha256": ["one"],
+            "sample_rate_hz": [125],
+            "n_samples": [4],
+        }
+    )
+    artifact = save_embedding_artifact(
+        tmp_path,
+        stale,
+        input_manifest_fingerprint(index),
+        index,
+        np.ones((1, 2), dtype=np.float32),
+    )
+
+    with pytest.raises(ValueError, match="Stale source-faithful embedding artifact"):
+        load_embedding_artifact(artifact)
+
+    embeddings, loaded_index, metadata = load_embedding_artifact(
+        artifact,
+        allow_stale_source_faithful=True,
+    )
+    np.testing.assert_array_equal(embeddings, np.ones((1, 2), dtype=np.float32))
+    pd.testing.assert_frame_equal(loaded_index, index)
+    assert metadata["encoder"]["contract_version"] == "source-faithful-v2"
+
+
 def test_encoder_rejects_wrong_preprocessed_length():
     encoder = DummyEncoder()
     with pytest.raises(ValueError, match="expected 4 samples"):

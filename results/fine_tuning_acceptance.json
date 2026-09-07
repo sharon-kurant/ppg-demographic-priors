@@ -1,0 +1,73 @@
+{
+  "accepted": true,
+  "by_cohort": {
+    "but_ppg": {
+      "expected": 240,
+      "invalid": 0,
+      "missing": 0,
+      "present": 240,
+      "valid": 240
+    },
+    "ppg_bp": {
+      "expected": 240,
+      "invalid": 0,
+      "missing": 0,
+      "present": 240,
+      "valid": 240
+    },
+    "pulsedb_mimic": {
+      "expected": 240,
+      "invalid": 0,
+      "missing": 0,
+      "present": 240,
+      "valid": 240
+    },
+    "pulsedb_vital": {
+      "expected": 240,
+      "invalid": 0,
+      "missing": 0,
+      "present": 240,
+      "valid": 240
+    }
+  },
+  "checks": {
+    "all_present_runs_valid": true,
+    "data_contract": "source-faithful-v2",
+    "locked_manifests_valid": true,
+    "matrix_complete": true,
+    "model_contract": "source-faithful-v3",
+    "no_sensitivity_or_stale_result_files": true,
+    "no_unexpected_runs": true,
+    "seed_17_selection_reused_by_23_and_42": true,
+    "zscore_to_mmhg_checked_numerically": true
+  },
+  "counts": {
+    "expected_runs": 960,
+    "expected_selection_artifacts": 320,
+    "invalid_runs": 0,
+    "missing_runs": 0,
+    "present_runs": 960,
+    "unexpected_result_files": 0,
+    "unexpected_run_files": 0,
+    "valid_runs": 960,
+    "validated_selection_artifacts": 320
+  },
+  "executed_source_snapshot": {
+    "bundle_sha256": "114dc8bc59b5478dc3ddece21db357a1634bfd6546256175e33cb6736df07832",
+    "capture_point": "after_all_array_tasks_imported_training_source",
+    "provenance_note": "These are the pre-integration hashes captured after every Slurm array task had imported its training source. They identify executed behavior even if files were edited later. Subsequent changes clarify provenance labels, target-transform scopes, and the PaPaGei dense-output alias; they do not alter the already executed numerical training path.",
+    "source_file_sha256": {
+      "src/ppg_bp_incremental/models/bp_head_v3.py": "6980518fabfd8e367e0d29096a09ee42192607672aea3fd6c06a63754f25dc52",
+      "src/ppg_bp_incremental/models/contracts.py": "5b386029beb9ae5aa1c411a1a47703326de35197c378d2706172197b51c8c357",
+      "src/ppg_bp_incremental/models/encoders/anyppg.py": "a911a2212338d149377dab586875b0727fc5ae26d270d45f854a28651ba6099f",
+      "src/ppg_bp_incremental/models/encoders/cache.py": "3832eb043184de5cecd3a0ce9a8946cfefae5ef9f7722f861a90674deb162d04",
+      "src/ppg_bp_incremental/models/encoders/papagei.py": "a263b11bc298d852c616339040bcaa71c220cc9e7f16a74d0d5d90a7bc3c1485",
+      "src/ppg_bp_incremental/models/encoders/pulseppg.py": "3aa6f973a8fe2a58dc89c480cad0838b28723f30f5bc02b5e922536227013648",
+      "src/ppg_bp_incremental/models/encoders/source_integrity.py": "f10ed79ac5bec1b7f58da725a6399b5060698092c3a45a10e44edd0950b6301d",
+      "src/ppg_bp_incremental/training/finetune_v3.py": "2a251cd08b030f91c55823ca83f1eb229e3d9cac36cb42d04827c4946d458b85"
+    }
+  },
+  "schema_version": "finetuning-v3-acceptance-v2",
+  "scope": "Original 4-cohort x 4-model x 2-condition x 2-target x 5-fold x 3-seed matrix",
+  "summary": "PASS: source-faithful-v3 fine-tuning acceptance\nRuns: 960/960 valid; 0 invalid; 0 missing; 0 unexpected.\nSelections: 320/320 validated.\nBy cohort: ppg_bp 240/240; pulsedb_vital 240/240; pulsedb_mimic 240/240; but_ppg 240/240."
+}

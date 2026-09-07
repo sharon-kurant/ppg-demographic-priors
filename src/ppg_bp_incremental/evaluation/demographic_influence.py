@@ -1,7 +1,7 @@
 """Read-only demographic influence analysis for the reported OOF benchmark.
 
 The functions in this module never refit a foundation encoder or a BP model.
-They operate only on the reported ``source-faithful-v2`` out-of-fold
+They operate only on the reported source-faithful out-of-fold
 predictions and retain participant-balanced scoring throughout.
 """
 
@@ -38,6 +38,17 @@ MODEL_LABELS = {
 
 PAIR_KEYS = ["dataset", "subject_id", "measurement_id", "fold", "target"]
 EXPECTED_OUTER_FOLDS = frozenset(range(5))
+EXPECTED_DATASETS = frozenset(
+    {"PPG-BP", "PulseDB-Vital", "PulseDB-MIMIC", "BUT PPG"}
+)
+FOUNDATION_MODELS = ("papagei_p", "papagei_s", "pulseppg", "anyppg")
+FINE_TUNING_SEEDS = (17, 23, 42)
+EXPECTED_DEMOGRAPHIC_FIELDS = {
+    "PPG-BP": "age/sex/BMI",
+    "PulseDB-Vital": "age/sex/BMI",
+    "PulseDB-MIMIC": "age/sex",
+    "BUT PPG": "age/sex/BMI",
+}
 
 
 @dataclass(frozen=True)
@@ -201,6 +212,343 @@ def paired_subject_mae_contrast(
         "bootstrap_confidence": float(bootstrap.confidence),
         "bootstrap_seed": int(resolved_seed),
     }
+
+
+def _checked_seed_specific_units(units: pd.DataFrame) -> pd.DataFrame:
+    """Validate seed-preserving OOF units without collapsing neural seeds."""
+
+    required = {
+        *PAIR_KEYS,
+        "model",
+        "condition",
+        "seed",
+        "y_true_mmhg",
+        "y_pred_mmhg",
+        "demographic_fields",
+        "contract_version",
+        "n_segments",
+        "n_seeds",
+        "aggregation_mode",
+    }
+    missing = sorted(required.difference(units.columns))
+    if missing:
+        raise ValueError(
+            f"seed-specific aggregated predictions lack columns: {missing}"
+        )
+    checked = units.copy()
+    versions = set(checked["contract_version"].astype(str))
+    if versions != {CONTRACT_VERSION}:
+        raise ValueError(
+            f"seed-aware contrasts require {CONTRACT_VERSION}, observed {versions}"
+        )
+    numeric = checked[["y_true_mmhg", "y_pred_mmhg"]].to_numpy(float)
+    if not np.isfinite(numeric).all():
+        raise ValueError("seed-specific predictions contain non-finite BP values")
+    seeds = pd.to_numeric(checked["seed"], errors="coerce")
+    if seeds.isna().any() or not np.equal(seeds, np.floor(seeds)).all():
+        raise ValueError("training seeds must be finite integers")
+    checked["seed"] = seeds.astype(int)
+    if checked.duplicated(PAIR_KEYS + ["model", "condition", "seed"]).any():
+        raise ValueError("seed-specific predictions contain duplicate method rows")
+
+    fold_values = pd.to_numeric(checked["fold"], errors="coerce")
+    if fold_values.isna().any() or not np.equal(
+        fold_values, np.floor(fold_values)
+    ).all():
+        raise ValueError("outer folds must be finite integers")
+    checked["fold"] = fold_values.astype(int)
+    for dataset, group in checked.groupby("dataset", sort=False):
+        observed = frozenset(group["fold"].unique())
+        if observed != EXPECTED_OUTER_FOLDS:
+            raise ValueError(
+                f"{dataset} does not contain the expected outer folds: {observed}"
+            )
+    subject_folds = checked.groupby(["dataset", "subject_id"])["fold"].nunique()
+    if (subject_folds != 1).any():
+        raise ValueError("a participant appears in more than one outer fold")
+    truth_range = checked.groupby(
+        ["dataset", "subject_id", "measurement_id", "target"]
+    )["y_true_mmhg"].agg(lambda values: float(values.max() - values.min()))
+    if (truth_range > 1e-10).any():
+        raise ValueError("reference BP differs across methods or training seeds")
+    segment_counts = pd.to_numeric(checked["n_segments"], errors="coerce")
+    if (
+        segment_counts.isna().any()
+        or not np.equal(segment_counts, np.floor(segment_counts)).all()
+        or (segment_counts < 1).any()
+    ):
+        raise ValueError("n_segments must contain positive integers")
+    checked["n_segments"] = segment_counts.astype(int)
+    segment_range = checked.groupby(
+        ["dataset", "subject_id", "measurement_id", "target"]
+    )["n_segments"].agg(lambda values: int(values.max() - values.min()))
+    if (segment_range != 0).any():
+        raise ValueError("n_segments differs across paired methods or seeds")
+    if not pd.to_numeric(checked["n_seeds"], errors="coerce").eq(1).all():
+        raise ValueError("seed-specific aggregate rows must each represent one seed")
+
+    fine_tuned = checked["condition"].isin(
+        {"finetuned", "finetuned_demographics"}
+    )
+    frozen = checked["condition"].isin({"frozen", "frozen_demographics"})
+    if not checked.loc[fine_tuned, "aggregation_mode"].eq(
+        "single_neural_seed"
+    ).all():
+        raise ValueError("fine-tuned rows must declare single_neural_seed")
+    if not checked.loc[frozen, "aggregation_mode"].eq(
+        "single_deterministic_fit"
+    ).all():
+        raise ValueError("frozen rows must declare single_deterministic_fit")
+
+    has_demographics = checked["condition"].astype(str).str.contains(
+        "demographics"
+    )
+    fields = checked["demographic_fields"].fillna("none").astype(str)
+    if fields[has_demographics].eq("none").any():
+        raise ValueError("a demographic condition is labeled with no demographics")
+    if fields[~has_demographics].ne("none").any():
+        raise ValueError("a no-demographic condition carries demographic fields")
+    for dataset, expected_fields in EXPECTED_DEMOGRAPHIC_FIELDS.items():
+        observed = set(
+            fields[
+                checked["dataset"].eq(dataset) & has_demographics
+            ].astype(str)
+        )
+        if observed and observed != {expected_fields}:
+            raise ValueError(
+                f"{dataset} demographic fields must be {expected_fields}, "
+                f"observed {sorted(observed)}"
+            )
+    return checked
+
+
+def _subject_error_delta_for_seed(
+    candidate: pd.DataFrame,
+    reference: pd.DataFrame,
+) -> tuple[pd.Series, int]:
+    left = candidate[PAIR_KEYS + ["y_true_mmhg", "y_pred_mmhg"]]
+    right = reference[PAIR_KEYS + ["y_true_mmhg", "y_pred_mmhg"]]
+    paired = left.merge(
+        right,
+        on=PAIR_KEYS,
+        suffixes=("_candidate", "_reference"),
+        validate="one_to_one",
+    )
+    if len(paired) != len(left) or len(paired) != len(right):
+        raise ValueError("candidate and reference do not have identical scored rows")
+    if not np.allclose(
+        paired["y_true_mmhg_candidate"],
+        paired["y_true_mmhg_reference"],
+        rtol=0,
+        atol=1e-10,
+    ):
+        raise ValueError("candidate and reference truths differ")
+    truth = paired["y_true_mmhg_candidate"].to_numpy(float)
+    paired["absolute_error_delta"] = np.abs(
+        paired["y_pred_mmhg_candidate"].to_numpy(float) - truth
+    ) - np.abs(paired["y_pred_mmhg_reference"].to_numpy(float) - truth)
+    subject_delta = paired.groupby("subject_id", sort=True)[
+        "absolute_error_delta"
+    ].mean()
+    return subject_delta, int(len(paired))
+
+
+def seed_aware_paired_subject_mae_contrast(
+    candidate: pd.DataFrame,
+    reference: pd.DataFrame,
+    *,
+    bootstrap: BootstrapSpec,
+    seed_parts: tuple[object, ...] = (),
+) -> dict[str, float | int | str]:
+    """Pair participants within seed, then average three seed deltas per draw.
+
+    A single participant bootstrap sample is shared across the three fixed
+    training seeds. Within each draw, participant-macro MAE differences are
+    computed separately for seeds 17, 23, and 42 and then averaged. A
+    deterministic frozen reference is reused identically for each neural seed.
+    """
+
+    bootstrap.checked()
+    candidate_seeds = tuple(sorted(candidate["seed"].astype(int).unique()))
+    if candidate_seeds != FINE_TUNING_SEEDS:
+        raise ValueError(
+            "fine-tuned candidate must contain exactly training seeds "
+            f"{FINE_TUNING_SEEDS}, observed {candidate_seeds}"
+        )
+    reference_seeds = tuple(sorted(reference["seed"].astype(int).unique()))
+    if reference_seeds == FINE_TUNING_SEEDS:
+        reference_seed_mode = "matched_training_seed"
+    elif len(reference_seeds) == 1:
+        reference_seed_mode = "deterministic_reference_reused_across_seeds"
+    else:
+        raise ValueError(
+            "reference must contain exactly training seeds 17, 23, and 42 or "
+            f"one deterministic seed, observed {reference_seeds}"
+        )
+
+    subject_order: pd.Index | None = None
+    measurement_count: int | None = None
+    seed_deltas: list[np.ndarray] = []
+    seed_point_estimates: dict[int, float] = {}
+    for training_seed in FINE_TUNING_SEEDS:
+        candidate_seed = candidate[candidate["seed"].eq(training_seed)]
+        reference_seed = (
+            reference[reference["seed"].eq(training_seed)]
+            if reference_seed_mode == "matched_training_seed"
+            else reference
+        )
+        subject_delta, current_measurement_count = _subject_error_delta_for_seed(
+            candidate_seed, reference_seed
+        )
+        if subject_order is None:
+            subject_order = subject_delta.index
+            measurement_count = current_measurement_count
+        elif not subject_delta.index.equals(subject_order):
+            raise ValueError("participant identities differ across training seeds")
+        elif current_measurement_count != measurement_count:
+            raise ValueError("measurement counts differ across training seeds")
+        values = subject_delta.to_numpy(float)
+        seed_deltas.append(values)
+        seed_point_estimates[training_seed] = float(values.mean())
+
+    assert subject_order is not None and measurement_count is not None
+    matrix = np.vstack(seed_deltas)
+    resolved_seed = _stable_seed(bootstrap.seed, *seed_parts)
+    rng = np.random.default_rng(resolved_seed)
+    sampled = rng.integers(
+        0,
+        matrix.shape[1],
+        size=(bootstrap.replicates, matrix.shape[1]),
+    )
+    draws = np.zeros(bootstrap.replicates, dtype=float)
+    for seed_values in matrix:
+        draws += seed_values[sampled].mean(axis=1) / len(FINE_TUNING_SEEDS)
+    alpha = (1 - bootstrap.confidence) / 2
+    low, high = np.quantile(draws, [alpha, 1 - alpha])
+    return {
+        "n_subjects": int(matrix.shape[1]),
+        "n_measurements_per_seed": measurement_count,
+        "n_training_seeds": len(FINE_TUNING_SEEDS),
+        "training_seeds": "/".join(str(seed) for seed in FINE_TUNING_SEEDS),
+        "reference_seed_mode": reference_seed_mode,
+        "seed_17_delta_mae": seed_point_estimates[17],
+        "seed_23_delta_mae": seed_point_estimates[23],
+        "seed_42_delta_mae": seed_point_estimates[42],
+        "seed_delta_mae_sample_sd": float(
+            np.std(list(seed_point_estimates.values()), ddof=1)
+        ),
+        "delta_mae_candidate_minus_reference": float(matrix.mean()),
+        "ci_low": float(low),
+        "ci_high": float(high),
+        "bootstrap_probability_candidate_better": float(np.mean(draws < 0)),
+        "bootstrap_method": (
+            "participant_paired_percentile_fixed_oof_mean_of_3_seed_deltas"
+        ),
+        "bootstrap_replicates": int(bootstrap.replicates),
+        "bootstrap_confidence": float(bootstrap.confidence),
+        "bootstrap_seed": int(resolved_seed),
+    }
+
+
+def fine_tuning_paired_contrasts(
+    units: pd.DataFrame,
+    *,
+    bootstrap: BootstrapSpec = BootstrapSpec(),
+) -> pd.DataFrame:
+    """Build the three seed-aware 32-endpoint fine-tuning contrasts."""
+
+    data = _checked_seed_specific_units(units)
+    datasets = frozenset(data["dataset"].astype(str).unique())
+    if datasets != EXPECTED_DATASETS:
+        raise ValueError(
+            "fine-tuning contrasts require exactly the four benchmark cohorts; "
+            f"observed {sorted(datasets)}"
+        )
+    records: list[dict[str, object]] = []
+    comparison_specs = (
+        (
+            "add_demographics_to_finetuned",
+            "finetuned_demographics",
+            "finetuned",
+        ),
+        (
+            "finetuned_vs_frozen_without_demographics",
+            "finetuned",
+            "frozen",
+        ),
+        (
+            "finetuned_vs_frozen_with_demographics",
+            "finetuned_demographics",
+            "frozen_demographics",
+        ),
+    )
+    for dataset in sorted(EXPECTED_DATASETS):
+        for target in ("sbp", "dbp"):
+            for model in FOUNDATION_MODELS:
+                for contrast, candidate_condition, reference_condition in comparison_specs:
+                    candidate = _method_rows(
+                        data,
+                        dataset=dataset,
+                        target=target,
+                        model=model,
+                        condition=candidate_condition,
+                    )
+                    reference = _method_rows(
+                        data,
+                        dataset=dataset,
+                        target=target,
+                        model=model,
+                        condition=reference_condition,
+                    )
+                    result = seed_aware_paired_subject_mae_contrast(
+                        candidate,
+                        reference,
+                        bootstrap=bootstrap,
+                        seed_parts=(dataset, target, model, contrast),
+                    )
+                    demographic_rows = (
+                        candidate
+                        if "demographics" in candidate_condition
+                        else reference
+                        if "demographics" in reference_condition
+                        else None
+                    )
+                    demographic_fields = (
+                        str(demographic_rows["demographic_fields"].iloc[0])
+                        if demographic_rows is not None
+                        else "none"
+                    )
+                    records.append(
+                        {
+                            "contract_version": CONTRACT_VERSION,
+                            "dataset": dataset,
+                            "target": target,
+                            "model": model,
+                            "model_label": MODEL_LABELS[model],
+                            "contrast": contrast,
+                            "candidate_condition": candidate_condition,
+                            "reference_condition": reference_condition,
+                            "demographic_fields": demographic_fields,
+                            "delta_definition": (
+                                "candidate_minus_reference_participant_macro_mae"
+                            ),
+                            "training_seed_treatment": (
+                                "fixed_mean_of_seed_17_23_42_deltas_within_draw"
+                            ),
+                            **result,
+                        }
+                    )
+    contrasts = pd.DataFrame.from_records(records).sort_values(
+        ["contrast", "dataset", "target", "model"]
+    ).reset_index(drop=True)
+    counts = contrasts.groupby("contrast").size().to_dict()
+    expected = {contrast: 32 for contrast, _, _ in comparison_specs}
+    if counts != expected or len(contrasts) != 96:
+        raise RuntimeError(
+            "fine-tuning paired-contrast matrix is incomplete: "
+            f"expected {expected}, observed {counts}"
+        )
+    return contrasts
 
 
 def demographic_paired_contrasts(
@@ -669,6 +1017,7 @@ def save_demographic_influence_analysis(
     aggregated_predictions_csv: str | Path,
     raw_predictions_csv: str | Path,
     output_root: str | Path,
+    seed_specific_aggregated_predictions_csv: str | Path | None = None,
     bootstrap: BootstrapSpec = BootstrapSpec(),
 ) -> dict[str, Path]:
     output = Path(output_root)
@@ -691,6 +1040,11 @@ def save_demographic_influence_analysis(
         "demographic_distributions": distributions,
         "complementarity": complementarity,
     }
+    if seed_specific_aggregated_predictions_csv is not None:
+        seed_units = pd.read_csv(seed_specific_aggregated_predictions_csv)
+        tables["fine_tuning_paired_contrasts"] = fine_tuning_paired_contrasts(
+            seed_units, bootstrap=bootstrap
+        )
     paths: dict[str, Path] = {}
     for name, table in tables.items():
         path = output / f"{name}.csv"

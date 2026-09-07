@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ppg-demographic-priors"
-version = "0.3.0"
-description = "Subject-disjoint evaluation of demographic priors and frozen PPG representations for blood-pressure estimation"
+version = "0.4.0"
+description = "Subject-disjoint evaluation of demographic priors with frozen and fine-tuned PPG foundation models"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -33,7 +33,7 @@ dependencies = [
   "h5py>=3.10",
   "matplotlib>=3.8",
   "mne==1.10.2",
-  "numpy>=2.0",
+  "numpy>=1.26,<3",
   "openpyxl>=3.1",
   "pandas>=2.0",
   "PyYAML>=6.0",
@@ -43,7 +43,7 @@ dependencies = [
 
 [project.optional-dependencies]
 foundation-models = [
-  "torch>=2.2",
+  "torch>=1.12",
 ]
 dev = [
   "pytest>=8.0",

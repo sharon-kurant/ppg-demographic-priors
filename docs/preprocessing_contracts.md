@@ -1,4 +1,4 @@
-# Signal preprocessing contracts
+# Signal preprocessing contracts (source-faithful-v3)
 
 All cohort loaders preserve the original selected waveform. PulseDB uses
 `PPG_Record`; already filtered `PPG_F` is rejected. Handcrafted features are
@@ -32,3 +32,6 @@ Only the approximately 2.1-second PPG-BP records are shorter than the model
 windows. They are symmetrically zero-padded after duration-preserving
 resampling. No reflection or repetition policy is part of the released study.
 PulseDB and BUT PPG require no padding.
+
+The same preprocessed model tensor is used by the frozen and fine-tuned paths.
+Fine-tuning changes encoder weights but does not alter the waveform contract.

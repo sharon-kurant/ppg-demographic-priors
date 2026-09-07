@@ -50,8 +50,8 @@ def _canonical_measurement_ids(frame: pd.DataFrame) -> np.ndarray:
     if frame.empty:
         return np.empty(0, dtype=str)
     if set(frame["dataset"].astype(str)) == {"PPG-BP"}:
-        return frame["subject_id"].astype(str).to_numpy()
-    return frame["measurement_id"].astype(str).to_numpy()
+        return frame["subject_id"].astype(str).to_numpy(dtype=str)
+    return frame["measurement_id"].astype(str).to_numpy(dtype=str)
 
 
 def participant_measurement_weights(frame: pd.DataFrame) -> np.ndarray:
@@ -59,8 +59,10 @@ def participant_measurement_weights(frame: pd.DataFrame) -> np.ndarray:
 
     if frame.empty:
         raise ValueError("cannot weight an empty frame")
-    subject = frame["subject_id"].astype(str).to_numpy()
-    measurement = _canonical_measurement_ids(frame)
+    # NumPy 1.26 requires homogeneous unicode arrays for ``np.char`` while
+    # pandas otherwise returns object dtype here.
+    subject = frame["subject_id"].astype(str).to_numpy(dtype=str)
+    measurement = np.asarray(_canonical_measurement_ids(frame), dtype=str)
     keys = pd.DataFrame({"subject": subject, "measurement": measurement})
     rows_per_measurement = keys.groupby(
         ["subject", "measurement"], sort=False
@@ -177,8 +179,8 @@ def _participant_macro_mae(
         raise ValueError("prediction and truth arrays have invalid ranks")
     if predicted.shape[1:] != truth.shape:
         raise ValueError("prediction and truth arrays are not row aligned")
-    subject = frame["subject_id"].astype(str).to_numpy()
-    measurement = _canonical_measurement_ids(frame)
+    subject = frame["subject_id"].astype(str).to_numpy(dtype=str)
+    measurement = np.asarray(_canonical_measurement_ids(frame), dtype=str)
     measurement_keys = np.char.add(np.char.add(subject, "\x1f"), measurement)
     unique_measurements, measurement_code = np.unique(
         measurement_keys, return_inverse=True

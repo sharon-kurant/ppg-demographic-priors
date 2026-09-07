@@ -15,11 +15,15 @@ from ppg_bp_incremental.models.encoders.base import (
     PPGEncoder,
 )
 from ppg_bp_incremental.models.encoders.papagei import (
+    PPGBP_DATASET_NAME,
+    ppgbp_final_sample_trim_metadata,
     ppgbp_preprocessing_shape_trace,
     preprocess_ppgbp_official,
+    trim_ppgbp_final_raw_sample,
 )
 from ppg_bp_incremental.models.contracts import CONTRACT_VERSION, MODEL_CONTRACTS
 from ppg_bp_incremental.models.encoders.source_integrity import (
+    load_torch_checkpoint,
     verify_checkpoint_sha256,
     verify_git_checkout,
 )
@@ -30,7 +34,6 @@ PULSEPPG_CHECKPOINT_SHA256 = MODEL_CONTRACTS["pulseppg"].checkpoint_sha256
 PULSEPPG_TARGET_RATE_HZ = 50
 PULSEPPG_INPUT_SAMPLES = 500
 PULSEPPG_EMBEDDING_DIMENSION = 512
-PPGBP_DATASET_NAME = "PPG-BP"
 
 
 def preprocess_pulseppg(
@@ -49,12 +52,7 @@ def preprocess_pulseppg(
 
     signal = np.asarray(signal)
     if dataset == PPGBP_DATASET_NAME:
-        signal = signal.squeeze()
-        if signal.ndim != 1 or len(signal) < 3:
-            raise ValueError(
-                "Released Pulse-PPG PPG-BP trimming requires at least three raw samples"
-            )
-        signal = signal[:-1]
+        signal = trim_ppgbp_final_raw_sample(signal)
     return preprocess_ppgbp_official(
         signal,
         sampling_rate_hz,
@@ -81,11 +79,7 @@ def pulseppg_preprocessing_shape_trace(
         )
 
     squeezed = signal.squeeze()
-    if squeezed.ndim != 1 or len(squeezed) < 3:
-        raise ValueError(
-            "Released Pulse-PPG PPG-BP trimming requires at least three raw samples"
-        )
-    trimmed = squeezed[:-1]
+    trimmed = trim_ppgbp_final_raw_sample(squeezed)
     downstream = ppgbp_preprocessing_shape_trace(
         trimmed,
         sampling_rate_hz,
@@ -165,11 +159,7 @@ class PulsePPGEncoder(PPGEncoder):
             n_block=12,
             finalpool="max",
         )
-        checkpoint = torch.load(
-            self.checkpoint_path,
-            map_location="cpu",
-            weights_only=True,
-        )
+        checkpoint = load_torch_checkpoint(self.checkpoint_path)
         if "net" not in checkpoint:
             raise ValueError("Pulse-PPG checkpoint does not contain a 'net' state dict")
         self.model.load_state_dict(checkpoint["net"], strict=True)
@@ -260,8 +250,20 @@ class PulsePPGEncoder(PPGEncoder):
                 "filter_low_hz": 0.5,
                 "filter_high_hz": 12,
                 "smoothing_window_ms": 50,
+                "smoothing_applied_when_source_rate_hz_gte": 75,
                 "resampling": "scipy.signal.resample_poly",
                 "padding": "symmetric_zero_only_if_short_to_500",
+                "dataset_specific_operations": {
+                    PPGBP_DATASET_NAME: {
+                        "final_raw_sample_trim": {
+                            "samples_removed_from_end": 1,
+                            "operation_order": (
+                                "before_zscore_filter_resample_and_padding"
+                            ),
+                            "source": "pulseppg/data/process/PPGBP.py:90",
+                        }
+                    }
+                },
                 "pooling": "model_max_pool",
             },
             input_sampling_rate_hz=PULSEPPG_TARGET_RATE_HZ,
@@ -274,12 +276,11 @@ class PulsePPGEncoder(PPGEncoder):
         if dataset != PPGBP_DATASET_NAME:
             return fingerprint
         preprocessing = dict(fingerprint.preprocessing)
-        preprocessing["ppgbp_final_raw_sample_trim"] = {
-            "applied": True,
-            "samples_removed_from_end": 1,
-            "operation_order": "before_zscore_filter_resample_and_padding",
-            "source": "pulseppg/data/process/PPGBP.py:90",
-        }
+        preprocessing["ppgbp_final_raw_sample_trim"] = (
+            ppgbp_final_sample_trim_metadata(
+                source="pulseppg/data/process/PPGBP.py:90"
+            )
+        )
         return replace(
             fingerprint,
             model_version=f"{fingerprint.model_version}-ppgbp-trim-v1",

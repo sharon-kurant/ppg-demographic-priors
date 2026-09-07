@@ -11,11 +11,17 @@ import numpy as np
 import pandas as pd
 
 
-PAPER_OUTPUT_VERSION = "paper-demographic-summary-v1"
+PAPER_OUTPUT_VERSION = "paper-demographic-summary-v2"
 DATASET_ORDER = ("PPG-BP", "BUT PPG", "PulseDB-Vital", "PulseDB-MIMIC")
 TARGET_ORDER = ("sbp", "dbp")
 MODEL_ORDER = (
     "handcrafted_ppg",
+    "papagei_p",
+    "papagei_s",
+    "pulseppg",
+    "anyppg",
+)
+FOUNDATION_MODEL_ORDER = (
     "papagei_p",
     "papagei_s",
     "pulseppg",
@@ -191,18 +197,6 @@ def build_information_source_table(
     return pd.DataFrame.from_records(records)
 
 
-def _overlap_marker(metrics: pd.DataFrame, dataset: str, model: str) -> str:
-    if model == "handcrafted_ppg" or not dataset.startswith("PulseDB"):
-        return ""
-    rows = metrics[
-        metrics["dataset"].eq(dataset) & metrics["model"].eq(model)
-    ]
-    if "pretraining_overlap" not in rows:
-        return ""
-    values = rows["pretraining_overlap"].dropna().astype(str).str.lower()
-    return "‡" if (~values.isin({"none", "not_applicable", ""})).any() else ""
-
-
 def plot_demographic_effect_and_spread(
     metrics: pd.DataFrame,
     contrasts: pd.DataFrame,
@@ -291,12 +285,11 @@ def plot_demographic_effect_and_spread(
     for row_index, model in enumerate(MODEL_ORDER):
         for column_index, (dataset, _target) in enumerate(endpoints):
             value = matrix[row_index, column_index]
-            marker = _overlap_marker(metrics, dataset, model)
             color = "white" if value < -2.5 or value > 3 else "black"
             axis.text(
                 column_index,
                 row_index,
-                f"{value:+.2f}{marker}",
+                f"{value:+.2f}",
                 ha="center",
                 va="center",
                 fontsize=6.2,
@@ -360,6 +353,116 @@ def plot_demographic_effect_and_spread(
     return output
 
 
+def plot_finetuning_effect(
+    contrasts: pd.DataFrame,
+    output_path: str | Path,
+) -> Path:
+    """Render the paper's frozen-to-fine-tuned MAE comparison."""
+
+    _require_columns(
+        contrasts,
+        {
+            "dataset",
+            "target",
+            "model",
+            "contrast",
+            "delta_mae_candidate_minus_reference",
+            "ci_low",
+            "ci_high",
+        },
+        "fine-tuning paired contrasts",
+    )
+    endpoints = [
+        (dataset, target) for dataset in DATASET_ORDER for target in TARGET_ORDER
+    ]
+    endpoint_labels = [
+        "PPG-BP\nSBP",
+        "PPG-BP\nDBP",
+        "BUT PPG\nSBP",
+        "BUT PPG\nDBP",
+        "Vital\nSBP",
+        "Vital\nDBP",
+        "MIMIC\nSBP†",
+        "MIMIC\nDBP†",
+    ]
+    panels = (
+        ("finetuned_vs_frozen_without_demographics", "A  Without demographics"),
+        ("finetuned_vs_frozen_with_demographics", "B  With demographics"),
+    )
+    plt.rcParams.update(
+        {
+            "font.family": "DejaVu Sans",
+            "font.size": 7.0,
+            "axes.titlesize": 8.0,
+            "xtick.labelsize": 6.2,
+            "ytick.labelsize": 6.6,
+        }
+    )
+    figure, axes = plt.subplots(1, 2, figsize=(6.62, 1.58), sharey=True)
+    for axis, (contrast_name, title) in zip(axes, panels, strict=True):
+        subset = contrasts[contrasts["contrast"].eq(contrast_name)]
+        matrix = np.full((len(FOUNDATION_MODEL_ORDER), len(endpoints)), np.nan)
+        lows = np.full_like(matrix, np.nan)
+        highs = np.full_like(matrix, np.nan)
+        for row_index, model in enumerate(FOUNDATION_MODEL_ORDER):
+            for column_index, (dataset, target) in enumerate(endpoints):
+                row = _one(
+                    subset,
+                    subset["model"].eq(model)
+                    & subset["dataset"].eq(dataset)
+                    & subset["target"].eq(target),
+                    f"fine-tuning effect, {contrast_name}/{model}/{dataset}/{target}",
+                )
+                matrix[row_index, column_index] = float(
+                    row["delta_mae_candidate_minus_reference"]
+                )
+                lows[row_index, column_index] = float(row["ci_low"])
+                highs[row_index, column_index] = float(row["ci_high"])
+
+        axis.imshow(matrix, cmap="RdBu_r", vmin=-3.6, vmax=3.6, aspect="auto")
+        axis.set_xticks(np.arange(len(endpoint_labels)), endpoint_labels)
+        axis.set_yticks(
+            np.arange(len(FOUNDATION_MODEL_ORDER)),
+            [MODEL_LABELS[model] for model in FOUNDATION_MODEL_ORDER],
+        )
+        axis.tick_params(length=0, pad=2)
+        axis.set_title(title, loc="left", fontweight="bold", pad=4)
+        for row_index in range(len(FOUNDATION_MODEL_ORDER)):
+            for column_index in range(len(endpoints)):
+                value = matrix[row_index, column_index]
+                axis.text(
+                    column_index,
+                    row_index,
+                    f"{value:+.2f}",
+                    ha="center",
+                    va="center",
+                    fontsize=5.5,
+                    color="white" if abs(value) >= 2.25 else "black",
+                )
+                if highs[row_index, column_index] < 0 or lows[row_index, column_index] > 0:
+                    axis.add_patch(
+                        plt.Rectangle(
+                            (column_index - 0.46, row_index - 0.43),
+                            0.92,
+                            0.86,
+                            fill=False,
+                            edgecolor="#202020",
+                            linewidth=0.9,
+                        )
+                    )
+        for spine in axis.spines.values():
+            spine.set_linewidth(0.7)
+
+    figure.subplots_adjust(
+        left=0.105, right=0.992, top=0.82, bottom=0.23, wspace=0.12
+    )
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    figure.savefig(output, dpi=360, bbox_inches="tight", facecolor="white")
+    plt.close(figure)
+    return output
+
+
 def _markdown_table(frame: pd.DataFrame) -> str:
     display = frame.copy()
     display["Endpoint"] = display["dataset"] + " " + display["target"]
@@ -408,6 +511,7 @@ def save_paper_outputs(
     constants_csv: str | Path,
     complementarity_csv: str | Path,
     output_root: str | Path,
+    fine_tuning_contrasts_csv: str | Path | None = None,
     prediction_spread_csv: str | Path | None = None,
     aggregated_predictions_csv: str | Path | None = None,
 ) -> dict[str, Path]:
@@ -454,6 +558,12 @@ def save_paper_outputs(
         "table_markdown": table_md,
         "prediction_spread": spread_output,
     }
+    if fine_tuning_contrasts_csv is not None:
+        fine_tuning_path = Path(fine_tuning_contrasts_csv)
+        input_paths["fine_tuning_contrasts"] = fine_tuning_path
+        fine_tuning_figure = output / "figure_2_finetuning_effect.png"
+        plot_finetuning_effect(pd.read_csv(fine_tuning_path), fine_tuning_figure)
+        outputs["fine_tuning_figure"] = fine_tuning_figure
     manifest = {
         "paper_output_version": PAPER_OUTPUT_VERSION,
         "inputs": {name: _file_sha256(path) for name, path in input_paths.items()},
