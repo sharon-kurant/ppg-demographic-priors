@@ -92,8 +92,7 @@ Python 3.10 or later is required.
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e ".[foundation-models,dev]"
-pytest -m "not integration"
+python -m pip install -e ".[foundation-models]"
 ```
 
 The exact neural runtime is recorded in
@@ -104,9 +103,8 @@ aggregation and paper-output environment is recorded in
 ## Data and checkpoints
 
 Download all datasets, upstream repositories, and checkpoints from their
-original providers. See [`docs/data_acquisition.md`](docs/data_acquisition.md)
-and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). Pinned commits and
-checkpoint SHA-256 values are listed in
+original providers. See [`docs/data_acquisition.md`](docs/data_acquisition.md).
+Pinned commits and checkpoint SHA-256 values are listed in
 [`configs/sources.yaml`](configs/sources.yaml).
 
 PulseDB-Vital and PulseDB-MIMIC are prepared as separate 300-participant
@@ -174,9 +172,7 @@ docs/                    acquisition, preprocessing, protocol, and model audit
 results/                 non-participant aggregate tables and audit receipts
 scripts/                 acquisition, reproduction, aggregation, and plotting
 src/ppg_bp_incremental/  benchmark implementation and public CLI
-tests/                   unit, contract, and neural smoke tests
 ```
 
-Citation metadata are in [`CITATION.cff`](CITATION.cff). Original project code
-is released under the [MIT License](LICENSE); upstream resources retain their
-providers' terms.
+Citation metadata are in [`CITATION.cff`](CITATION.cff). Datasets, upstream
+model code, and checkpoints remain subject to their original providers' terms.

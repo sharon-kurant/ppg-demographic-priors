@@ -4,7 +4,6 @@ type: software
 title: "Demographic Priors in Frozen and Fine-Tuned PPG Foundation Models for Calibration-Free Blood Pressure Estimation"
 version: 0.4.1
 date-released: 2026-09-07
-license: MIT
 repository-code: "https://github.com/sharon-kurant/ppg-demographic-priors"
 url: "https://github.com/sharon-kurant/ppg-demographic-priors"
 authors:

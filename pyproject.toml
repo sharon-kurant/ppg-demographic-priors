@@ -8,7 +8,6 @@ version = "0.4.1"
 description = "Subject-disjoint evaluation of demographic priors with frozen and fine-tuned PPG foundation models"
 readme = "README.md"
 requires-python = ">=3.10"
-license = "MIT"
 authors = [
   {name = "Sharon Kurant"},
 ]
@@ -45,9 +44,6 @@ dependencies = [
 foundation-models = [
   "torch>=1.12",
 ]
-dev = [
-  "pytest>=8.0",
-]
 [project.scripts]
 ppg-bp = "ppg_bp_incremental.cli:main"
 
@@ -58,11 +54,3 @@ Issues = "https://github.com/sharon-kurant/ppg-demographic-priors/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.pytest.ini_options]
-addopts = "-ra"
-pythonpath = ["src"]
-testpaths = ["tests"]
-markers = [
-  "integration: uses locally downloaded foundation-model repositories and checkpoints",
-]
